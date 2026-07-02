@@ -35,5 +35,5 @@ export function initialState(viewportW: number, viewportH: number): AppState {
   // Deliberately different per-corner radii so the concentric behavior is
   // visible immediately; fitted in case the viewport is very small.
   const radii = fitRadiiToRect(rect, { tl: 72, tr: 24, br: 96, bl: 48 });
-  return { rect, radii, rings: 6, gap: 18, guides: true };
+  return { rect, radii, rings: 2, gap: 18, guides: true };
 }
