@@ -19,11 +19,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
       # Publishing to the gh-pages branch auto-enables GitHub Pages for the
       # repo; the workflow token cannot enable the newer "GitHub Actions"
       # Pages source on its own (that needs repo-admin API access).
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
-          exclude_assets: '.github'
+          publish_dir: ./dist
