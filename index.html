@@ -12,24 +12,24 @@
 <div id="ui">
   <h1>Concentric Corners</h1>
   <p class="hint">
-    Drag the round handles along the edges — each pair marks where a corner’s arc
-    starts and sets its radius ρ. Inner rectangles always stay concentric: they
-    share the same arc centers (ρ − δ rule). Drag corners to resize, the body to
-    move, double-click a handle to square that corner.
+    DRAG ROUND HANDLES TO SET EACH CORNER RADIUS ρ — CONSTRUCTION CIRCLES,
+    R-LEADERS AND DIMENSIONS APPEAR WHILE DRAGGING. RINGS OBEY ρ(i) = ρ − i·δ,
+    SHARING ARC CENTERS. DRAG CORNERS TO RESIZE, BODY TO MOVE, DBL-CLICK A
+    HANDLE TO SQUARE A CORNER.
   </p>
   <div class="row">
-    <label for="rings">Rings</label>
+    <label for="rings">RINGS</label>
     <input id="rings" type="range" min="0" max="14" step="1" value="2">
     <output id="ringsOut">2</output>
   </div>
   <div class="row">
-    <label for="gap">Gap δ</label>
+    <label for="gap">GAP δ</label>
     <input id="gap" type="range" min="6" max="48" step="1" value="18">
     <output id="gapOut">18</output>
   </div>
   <div class="row check">
     <input id="guides" type="checkbox" checked>
-    <label for="guides">Show arc centers &amp; guides</label>
+    <label for="guides">SHOW ARC CENTERS &amp; GUIDES</label>
   </div>
   <footer>
     A deterministic take on

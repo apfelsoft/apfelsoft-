@@ -1,6 +1,7 @@
 import "./style.css";
 import type { Corner, EdgeAxis, Rect } from "./geometry";
 import { clampRadius, fitRadiiToRect, radiusFromPointer } from "./geometry";
+import type { ActiveDrag } from "./render";
 import { createView } from "./render";
 import { MIN_SIZE, initialState } from "./state";
 
@@ -24,6 +25,10 @@ interface Drag {
 }
 
 let drag: Drag | null = null;
+
+/** What render() needs to know about the drag to show construction geometry. */
+const activeOf = (d: Drag | null): ActiveDrag | null =>
+  d ? { role: d.role, corner: d.corner, axis: d.axis } : null;
 
 stage.addEventListener("pointerdown", (e) => {
   const target = (e.target as Element).closest<SVGElement>("[data-role]");
@@ -68,13 +73,14 @@ stage.addEventListener("pointermove", (e) => {
     };
     state.radii = fitRadiiToRect(state.rect, state.radii);
   }
-  render(state);
+  render(state, activeOf(drag));
 });
 
 function endDrag(e: PointerEvent): void {
   if (!drag) return;
   drag = null;
   if (stage.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId);
+  render(state, null); // drop the construction overlay
 }
 stage.addEventListener("pointerup", endDrag);
 stage.addEventListener("pointercancel", endDrag);
@@ -84,7 +90,7 @@ stage.addEventListener("dblclick", (e) => {
   const target = (e.target as Element).closest<SVGElement>('[data-role="radius"]');
   if (!target) return;
   state.radii[target.dataset.corner as Corner] = 0;
-  render(state);
+  render(state, activeOf(drag));
 });
 
 /* ------------------------------------------------------------------------ *
@@ -100,18 +106,18 @@ const gapOut = document.getElementById("gapOut") as HTMLOutputElement;
 ringsInput.addEventListener("input", () => {
   state.rings = Number(ringsInput.value);
   ringsOut.textContent = ringsInput.value;
-  render(state);
+  render(state, activeOf(drag));
 });
 gapInput.addEventListener("input", () => {
   state.gap = Number(gapInput.value);
   gapOut.textContent = gapInput.value;
-  render(state);
+  render(state, activeOf(drag));
 });
 guidesInput.addEventListener("change", () => {
   state.guides = guidesInput.checked;
-  render(state);
+  render(state, activeOf(drag));
 });
 
-window.addEventListener("resize", () => render(state));
+window.addEventListener("resize", () => render(state, activeOf(drag)));
 
-render(state);
+render(state, activeOf(drag));
