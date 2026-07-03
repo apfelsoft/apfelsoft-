@@ -21,6 +21,7 @@ svg#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block
 #ui {
   position: fixed; top: 16px; left: 16px; z-index: 10;
   width: 272px; padding: 14px 16px 12px;
+  max-height: calc(100vh - 32px); overflow-y: auto;
   background: rgba(0, 0, 0, 0.85);
   border: 1px solid var(--dim);
   outline: 1px solid var(--hairline);
@@ -69,6 +70,32 @@ input[type="checkbox"] {
 input[type="checkbox"]:checked::after {
   content: ""; position: absolute; inset: 2px; background: var(--ink);
 }
+/* Explainer: collapsible theory note; text is selectable so the CSS
+   recipes can be copied out. */
+.explainer {
+  margin-top: 12px; padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+  -webkit-user-select: text; user-select: text;
+}
+.explainer summary {
+  font-size: 10.5px; color: var(--ink);
+  letter-spacing: 0.12em; cursor: pointer;
+  list-style: none;
+}
+.explainer summary::before { content: "+ "; color: var(--dim); }
+.explainer[open] summary::before { content: "\2212 "; }
+.explainer p {
+  color: var(--dim); font-size: 10.5px; margin-top: 8px;
+  letter-spacing: 0.04em;
+}
+.explainer em { font-style: normal; color: var(--ink); }
+.explainer pre {
+  margin-top: 8px; padding: 8px;
+  border: 1px solid var(--hairline);
+  color: var(--ink); font-size: 10px; line-height: 1.5;
+  overflow-x: auto;
+}
+
 #ui footer {
   margin-top: 12px; padding-top: 8px;
   border-top: 1px solid var(--hairline);

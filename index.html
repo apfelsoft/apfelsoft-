@@ -31,6 +31,46 @@
     <input id="guides" type="checkbox" checked>
     <label for="guides">SHOW ARC CENTERS &amp; GUIDES</label>
   </div>
+
+  <details class="explainer">
+    <summary>NO TRIG NEEDED — THE WHOLE THEORY</summary>
+    <p>
+      A corner arc's center sits ρ inward from <em>both</em> edges — at
+      (ρ,&nbsp;ρ) from the corner point. Inset the shape by a padding p and
+      both edges move inward by p. Keeping the <em>same</em> center therefore
+      costs exactly p of radius. Pure subtraction; no angles, no π, no roots:
+    </p>
+    <pre>ρᵢₙ  = max(0, ρₒᵤₜ − p)
+ρₒᵤₜ = ρᵢₙ + p</pre>
+    <p>
+      The only square root in sight is decorative: the shared center lies on
+      the 45° diagonal at distance ρ·√2 from the corner — a consequence of
+      (ρ,&nbsp;ρ), never an input. The max(0,&nbsp;…) clamp is where roundness
+      dies: once p&nbsp;≥&nbsp;ρ the corner goes sharp, and that step is
+      <em>lossy</em> — from a sharp inner corner you can only recover
+      ρₒᵤₜ&nbsp;≤&nbsp;p, not its exact value.
+    </p>
+    <p>In CSS the same calculus is one custom property away.<br>Outer reference → inner:</p>
+    <pre>.card {
+  --r: 24px;  --p: 16px;
+  border-radius: var(--r);
+  padding: var(--p);
+}
+.card &gt; .inner {
+  border-radius:
+    max(0px, calc(var(--r) - var(--p)));
+}</pre>
+    <p>Inner reference → outer (no clamp needed — adding p only grows it):</p>
+    <pre>.chip      { --ri: 8px; --p: 12px; }
+.chip-wrap {
+  padding: var(--p);
+  border-radius: calc(var(--ri) + var(--p));
+}</pre>
+    <p>And the i-th nesting level in one line, sharp corners included:</p>
+    <pre>border-radius:
+  max(0px, calc(var(--r) - var(--i)*var(--p)));</pre>
+  </details>
+
   <footer>
     A deterministic take on
     <a href="https://x.com/steveruizok/status/2072651352908370013" target="_blank" rel="noopener">@steveruizok’s demo</a>.

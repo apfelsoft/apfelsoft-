@@ -22,6 +22,49 @@ All formulas live in [`src/geometry.ts`](src/geometry.ts) as small pure function
 
 Rendering is a pure function of one state object (`src/state.ts`) — no randomness anywhere, hence *deterministic*.
 
+## Do you need trig? No — not even a square root
+
+A corner arc's center sits ρ inward from *both* edges, i.e. at (ρ, ρ) from the corner point. Inset the shape by a padding p and both edges move inward by p — so keeping the *same* center costs exactly p of radius. The whole theory is subtraction:
+
+```
+ρ_in  = max(0, ρ_out − p)    outer → inner
+ρ_out = ρ_in + p             inner → outer
+```
+
+The only square root anywhere is decorative: the shared center lies on the 45° diagonal at distance ρ·√2 from the corner — a consequence of (ρ, ρ), never an input. The `max(0, …)` clamp is where roundness dies: once p ≥ ρ the corner goes sharp. Note that step is **lossy** — from a sharp inner corner you can only recover ρ_out ≤ p, not its exact value.
+
+### The same calculus in CSS
+
+Outer reference → inner, clamped at sharp:
+
+```css
+.card {
+  --r: 24px;
+  --p: 16px;
+  border-radius: var(--r);
+  padding: var(--p);
+}
+.card > .inner {
+  border-radius: max(0px, calc(var(--r) - var(--p)));
+}
+```
+
+Inner reference → outer (no clamp needed — adding p only grows the radius):
+
+```css
+.chip      { --ri: 8px; --p: 12px; }
+.chip-wrap {
+  padding: var(--p);
+  border-radius: calc(var(--ri) + var(--p));
+}
+```
+
+The i-th nesting level in one line, sharp corners included:
+
+```css
+border-radius: max(0px, calc(var(--r) - var(--i) * var(--p)));
+```
+
 ## Using it
 
 Drag the round handles along the edges to set each corner's ρ (each corner's two handles stay in sync), drag the body to move, drag the square corner handles to resize, double-click a round handle to square that corner, and tweak ring count / gap δ in the panel.
