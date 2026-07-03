@@ -3,10 +3,11 @@ import {
   CORNERS,
   arcCenter,
   arcStartPoint,
-  ringAt,
   roundedRectPath,
+  uniformRadii,
 } from "./geometry";
 import type { AppState } from "./state";
+import { innerRadius, innerRect, outerRadius, refRect } from "./state";
 import { BASELINE, CAP, GLYPHS, SPACE_ADV } from "./hershey";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -22,10 +23,10 @@ export interface ActiveDrag {
  * Line-on-black: everything is a stroke, nothing is filled (black fills on
  * handles exist only to occlude the lines running beneath them).
  */
-const INK = "#f2f2f2";        // primary geometry
-const DIM = "#8f8f8f";        // dimensions, labels, secondary lines
-const FAINT = "#565656";      // construction / auxiliary lines
-const DASH_CONSTRUCT = "5 6"; // auxiliary circles and spokes
+const INK = "#f2f2f2";        // the reference box and active construction
+const DIM = "#8f8f8f";        // the derived box, dimensions, labels
+const FAINT = "#565656";      // auxiliary construction lines
+const DASH_CONSTRUCT = "5 6";
 const DASH_CENTER = "16 4 3 4"; // CAD center-line: long dash, dot, …
 
 /** Create an SVG element with attributes, optionally appended to a parent. */
@@ -42,7 +43,6 @@ function el<K extends keyof SVGElementTagNameMap>(
 
 /* --------------------------- Hershey lettering -------------------------- */
 
-/** Advance width of a string in glyph units. */
 function textAdvance(text: string): number {
   let w = 0;
   for (const ch of text) w += ch === " " ? SPACE_ADV : (GLYPHS[ch]?.adv ?? SPACE_ADV);
@@ -51,8 +51,7 @@ function textAdvance(text: string): number {
 
 /**
  * Stroke a string in single-line Hershey lettering. (x, y) is the baseline
- * anchor; size is the capital-letter height in pixels. Glyph paths are
- * scaled via transform, so vector-effect keeps the stroke width optical.
+ * anchor; size is the capital-letter height in pixels.
  */
 function hersheyText(
   parent: Element,
@@ -112,23 +111,49 @@ function dimension(parent: Element, p1: Point, p2: Point, offset: number, label:
   const dx = p2.x - p1.x, dy = p2.y - p1.y;
   const len = Math.hypot(dx, dy);
   if (len < 1) return;
-  const u = { x: dx / len, y: dy / len };       // along the measurement
+  const u = { x: dx / len, y: dy / len };
   // Sideways unit normal. Screen coordinates are y-down, so this is u
   // rotated CLOCKWISE: for a left→right line it points down the screen.
   const n = { x: -u.y, y: u.x };
   const q1 = { x: p1.x + n.x * offset, y: p1.y + n.y * offset };
   const q2 = { x: p2.x + n.x * offset, y: p2.y + n.y * offset };
-  const over = Math.sign(offset) * 4;           // extension lines overshoot a touch
+  const over = Math.sign(offset) * 4;
   line(parent, p1, { x: q1.x + n.x * over, y: q1.y + n.y * over }, DIM);
   line(parent, p2, { x: q2.x + n.x * over, y: q2.y + n.y * over }, DIM);
   line(parent, q1, q2, DIM);
   arrowhead(parent, q1, { x: -u.x, y: -u.y }, DIM);
   arrowhead(parent, q2, u, DIM);
-  const lift = 6;                               // letter just off the line
+  const lift = 6;
   hersheyText(parent, label,
     (q1.x + q2.x) / 2 + n.x * Math.sign(offset) * lift,
     (q1.y + q2.y) / 2 + n.y * Math.sign(offset) * lift + 4,
     11, { anchor: "middle", color: DIM });
+}
+
+/**
+ * A NARROW dimension, CAD style for spans too tight to hold arrowheads:
+ * the dimension line extends beyond both measured points and the two
+ * arrows sit outside, tips touching p1 and p2, pointing INWARD at each
+ * other. Used for the padding between the boxes.
+ */
+function narrowDimension(parent: Element, p1: Point, p2: Point, label: string): void {
+  const dx = p2.x - p1.x, dy = p2.y - p1.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return;
+  const u = { x: dx / len, y: dy / len };
+  const ext = 13;
+  line(parent,
+    { x: p1.x - u.x * ext, y: p1.y - u.y * ext },
+    { x: p2.x + u.x * ext, y: p2.y + u.y * ext }, DIM);
+  arrowhead(parent, p1, u, DIM);                      // outside, pointing in
+  arrowhead(parent, p2, { x: -u.x, y: -u.y }, DIM);   // outside, pointing in
+  // Letter the value beside the span, on the −n side (to the right of a
+  // downward measure) so it never crosses the dimension line.
+  const n = { x: -u.y, y: u.x };
+  hersheyText(parent, label,
+    (p1.x + p2.x) / 2 - n.x * 12,
+    (p1.y + p2.y) / 2 - n.y * 12 + 4,
+    10, { color: DIM });
 }
 
 /** CAD center mark: a small cross plus dash-dot center lines through c. */
@@ -148,24 +173,30 @@ function centerMark(parent: Element, c: Point, reach: number): void {
  * function that redraws it from state plus the current drag, if any.
  */
 export function createView(stage: SVGSVGElement): (state: AppState, active: ActiveDrag | null) => void {
-  const gRings = el("g", {}, stage);
-  const gOuter = el("g", {}, stage);
+  const gBoxes = el("g", {}, stage);
   const gGuides = el("g", { "pointer-events": "none" }, stage);
   const gAux = el("g", { "pointer-events": "none" }, stage);
   const gHandles = el("g", {}, stage);
 
-  // The outer rectangle — a bare stroke; pointer-events:fill makes its
-  // (unpainted) interior draggable as the "body".
+  // The outer box — its (unpainted) interior is draggable as the "body".
   const outerPath = el("path", {
     fill: "none",
     "pointer-events": "fill",
     stroke: INK,
     "stroke-width": 1.6,
     cursor: "move",
-  }, gOuter);
+  }, gBoxes);
   outerPath.dataset.role = "body";
 
-  // Square resize handles, one per corner.
+  // The inner box — never interactive; its radius is always derived or,
+  // when it is the reference, set through the handles that sit on it.
+  const innerPath = el("path", {
+    fill: "none",
+    stroke: DIM,
+    "stroke-width": 1.2,
+  }, gBoxes);
+
+  // Square resize handles on the outer box's corners.
   const cornerHandles = {} as Record<Corner, SVGRectElement>;
   for (const corner of CORNERS) {
     const cursor = corner === "tl" || corner === "br" ? "nwse-resize" : "nesw-resize";
@@ -178,8 +209,8 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     cornerHandles[corner] = square;
   }
 
-  // Round radius handles: two per corner, one on each adjacent edge, sitting
-  // at the corner's arc start points.
+  // Round radius handles: two per corner on the REFERENCE box. All corners
+  // are linked, so every handle sets the same single ρ.
   const radiusHandles: SVGGElement[] = [];
   for (const corner of CORNERS) {
     for (const axis of ["h", "v"] as const) {
@@ -187,72 +218,57 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       group.dataset.role = "radius";
       group.dataset.corner = corner;
       group.dataset.axis = axis;
-      el("circle", { r: 14, fill: "transparent" }, group); // generous hit area
+      el("circle", { r: 16, fill: "transparent" }, group); // generous hit area
       el("circle", { r: 4.5, fill: "#000", stroke: INK, "stroke-width": 1.4 }, group);
+      radiusHandles.push(group);
     }
-    // keep both handles addressable
   }
-  gHandles.querySelectorAll<SVGGElement>('[data-role="radius"]').forEach((g) => radiusHandles.push(g));
 
   /** Construction overlay for an in-progress radius drag. */
   function drawRadiusAux(state: AppState, corner: Corner, axis: EdgeAxis): void {
-    const { rect, radii } = state;
-    const ρ = radii[corner];
-    const c = arcCenter(rect, corner, ρ);
+    const ρOut = outerRadius(state);
+    const ρIn = innerRadius(state);
+    const ρRef = state.radius;
+    // Outer and inner arcs share this center — the demo's whole point.
+    const c = arcCenter(state.rect, corner, ρOut);
 
-    centerMark(gAux, c, ρ + 26);
+    centerMark(gAux, c, ρOut + 26);
 
-    // The full corner circle, plus each ring's concentric circle (ρ − i·δ),
-    // every one lettered with its radius at the 45° point.
-    const circles: Array<[r: number, main: boolean]> = [[ρ, true]];
-    for (let i = 1; i <= state.rings; i++) {
-      const r = ρ - i * state.gap;
-      if (r > 0) circles.push([r, false]);
-    }
     const diag = Math.SQRT1_2;
-    for (const [r, main] of circles) {
+    const circles: Array<[r: number, isRef: boolean]> = state.ref === "outer"
+      ? [[ρOut, true], [ρIn, false]]
+      : [[ρIn, true], [ρOut, false]];
+    for (const [r, isRef] of circles) {
       if (r < 1) continue;
       el("circle", {
         cx: c.x, cy: c.y, r,
         fill: "none",
-        stroke: main ? INK : FAINT,
+        stroke: isRef ? INK : FAINT,
         "stroke-width": 1,
-        ...(main ? {} : { "stroke-dasharray": DASH_CONSTRUCT }),
+        ...(isRef ? {} : { "stroke-dasharray": DASH_CONSTRUCT }),
       }, gAux);
       hersheyText(gAux, `R${Math.round(r)}`,
         c.x + r * diag + 5, c.y - r * diag - 4, 10,
-        { color: main ? INK : DIM });
+        { color: isRef ? INK : DIM });
     }
 
     // Radius leader: center → the handle being dragged, arrow at the rim.
-    const handle = arcStartPoint(rect, corner, axis, ρ);
-    const u = { x: (handle.x - c.x) / (ρ || 1), y: (handle.y - c.y) / (ρ || 1) };
-    if (ρ > 1) {
+    const ref = refRect(state);
+    const handle = arcStartPoint(ref, corner, axis, ρRef);
+    if (ρRef > 1) {
+      const u = { x: (handle.x - c.x) / ρRef, y: (handle.y - c.y) / ρRef };
       line(gAux, c, handle, INK);
       arrowhead(gAux, handle, u, INK);
     }
 
-    // Distance from the corner point to the arc start, dimensioned along
-    // the edge the handle rides on (its value is ρ by construction).
+    // Distance from the reference box's corner to the arc start (= ρ),
+    // dimensioned outside the box along the dragged edge.
     const onLeft = corner === "tl" || corner === "bl";
     const onTop = corner === "tl" || corner === "tr";
     const cornerPt = {
-      x: onLeft ? rect.x : rect.x + rect.w,
-      y: onTop ? rect.y : rect.y + rect.h,
+      x: onLeft ? ref.x : ref.x + ref.w,
+      y: onTop ? ref.y : ref.y + ref.h,
     };
-    drawEdgeDimension(cornerPt, handle, axis, onTop, onLeft, ρ);
-
-    // The analytic rule the rings obey.
-    hersheyText(gAux, `ρ(i) = ρ - i*δ`,
-      c.x, c.y + ρ + 40, 12, { anchor: "middle", color: DIM });
-    hersheyText(gAux, `δ = ${state.gap}`,
-      c.x, c.y + ρ + 58, 11, { anchor: "middle", color: FAINT });
-  }
-
-  function drawEdgeDimension(cornerPt: Point, handle: Point, axis: EdgeAxis, onTop: boolean, onLeft: boolean, ρ: number): void {
-    // Choose the offset sign so the dimension sits OUTSIDE the rectangle.
-    // dimension() offsets along the clockwise normal of corner→handle
-    // (y-down screen coords: left→right ⇒ normal points down).
     let offset: number;
     if (axis === "h") {
       const leftToRight = handle.x >= cornerPt.x;
@@ -261,7 +277,15 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       const topToBottom = handle.y >= cornerPt.y;
       offset = (topToBottom === onLeft) ? 22 : -22;
     }
-    dimension(gAux, cornerPt, handle, offset, String(Math.round(ρ)));
+    dimension(gAux, cornerPt, handle, offset, String(Math.round(ρRef)));
+
+    // The padding, measured between the two top edges mid-box — narrow
+    // style with inward-pointing arrows since p is small.
+    const midX = state.rect.x + state.rect.w / 2;
+    narrowDimension(gAux,
+      { x: midX, y: state.rect.y },
+      { x: midX, y: state.rect.y + state.padding },
+      `p=${state.padding}`);
   }
 
   /** Width/height dimensions while resizing. */
@@ -271,7 +295,7 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     dimension(gAux, { x: x + w, y: y + h }, { x: x + w, y }, 30, String(h));  // right
   }
 
-  /** Position readout while moving the whole rectangle. */
+  /** Position readout while moving the whole box. */
   function drawBodyAux(state: AppState): void {
     const { x, y } = state.rect;
     centerMark(gAux, { x, y }, 18);
@@ -279,43 +303,25 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
   }
 
   return function render(state: AppState, active: ActiveDrag | null): void {
-    const { rect, radii } = state;
+    const ρOut = outerRadius(state);
+    const ρIn = innerRadius(state);
+    const inner = innerRect(state);
 
-    outerPath.setAttribute("d", roundedRectPath(rect, radii));
+    outerPath.setAttribute("d", roundedRectPath(state.rect, uniformRadii(ρOut)));
+    innerPath.setAttribute("d", roundedRectPath(inner, uniformRadii(ρIn)));
+    // The reference box draws bright, the derived one dim.
+    outerPath.setAttribute("stroke", state.ref === "outer" ? INK : DIM);
+    innerPath.setAttribute("stroke", state.ref === "inner" ? INK : DIM);
 
-    // Concentric rings — non-interactive, rebuilt each frame; brightness
-    // steps down deterministically with the ring index.
-    gRings.textContent = "";
-    for (let i = 1; i <= state.rings; i++) {
-      const ring = ringAt(rect, radii, i * state.gap);
-      if (!ring) break;
-      el("path", {
-        d: roundedRectPath(ring.rect, ring.radii),
-        fill: "none",
-        stroke: INK,
-        opacity: Math.max(0.3, 0.75 - (i - 1) * 0.15),
-        "stroke-width": 1,
-      }, gRings);
-    }
-
-    // Idle guides: center cross per corner, dashed spokes to the arc start
-    // points, and the radius lettered beside the center.
+    // Idle guides: the shared center mark in each corner.
     gGuides.textContent = "";
-    if (state.guides) {
+    if (!active) {
       for (const corner of CORNERS) {
-        if (active?.role === "radius" && active.corner === corner) continue; // aux takes over
-        const ρ = radii[corner];
-        const c = arcCenter(rect, corner, ρ);
+        if (ρOut < 2) break;
+        const c = arcCenter(state.rect, corner, ρOut);
         for (const [ux, uy] of [[1, 0], [0, 1]] as const) {
           line(gGuides, { x: c.x - ux * 5, y: c.y - uy * 5 }, { x: c.x + ux * 5, y: c.y + uy * 5 }, DIM);
         }
-        if (ρ > 2) {
-          for (const axis of ["h", "v"] as const) {
-            line(gGuides, c, arcStartPoint(rect, corner, axis, ρ), FAINT,
-              { "stroke-dasharray": DASH_CONSTRUCT });
-          }
-        }
-        hersheyText(gGuides, `R${Math.round(ρ)}`, c.x + 8, c.y - 6, 10, { color: FAINT });
       }
     }
 
@@ -329,17 +335,19 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       drawBodyAux(state);
     }
 
-    // Handles follow the state.
+    // Handles: resize squares on the outer box, radius handles on the
+    // reference box.
     for (const corner of CORNERS) {
-      const px = corner === "tl" || corner === "bl" ? rect.x : rect.x + rect.w;
-      const py = corner === "tl" || corner === "tr" ? rect.y : rect.y + rect.h;
+      const px = corner === "tl" || corner === "bl" ? state.rect.x : state.rect.x + state.rect.w;
+      const py = corner === "tl" || corner === "tr" ? state.rect.y : state.rect.y + state.rect.h;
       cornerHandles[corner].setAttribute("x", String(px - 4.5));
       cornerHandles[corner].setAttribute("y", String(py - 4.5));
     }
+    const ref = refRect(state);
     for (const group of radiusHandles) {
       const corner = group.dataset.corner as Corner;
       const axis = group.dataset.axis as EdgeAxis;
-      const p = arcStartPoint(rect, corner, axis, radii[corner]);
+      const p = arcStartPoint(ref, corner, axis, state.radius);
       group.setAttribute("transform", `translate(${p.x} ${p.y})`);
     }
   };

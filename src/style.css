@@ -4,108 +4,117 @@
   --dim: #8f8f8f;
   --faint: #565656;
   --hairline: #2e2e2e;
+  --body: #b5b5b5;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { height: 100%; overflow: hidden; }
 body {
   background: var(--bg);
-  color: var(--ink);
-  font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  letter-spacing: 0.06em;
-  -webkit-user-select: none; user-select: none;
-  touch-action: none;
+  color: var(--body);
+  /* readable sans for everything; headlines and CAD labels opt into mono */
+  font: 15px/1.6 var(--sans);
 }
-svg#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 
-/* Control panel styled like a drawing title block: square, hairline, caps. */
-#ui {
-  position: fixed; top: 16px; left: 16px; z-index: 10;
-  width: 272px; padding: 14px 16px 12px;
-  max-height: calc(100vh - 32px); overflow-y: auto;
-  background: rgba(0, 0, 0, 0.85);
-  border: 1px solid var(--dim);
-  outline: 1px solid var(--hairline);
-  outline-offset: 3px;
-}
-#ui h1 {
-  font-size: 12px; font-weight: 400;
-  text-transform: uppercase; letter-spacing: 0.28em;
+/* ------------------------------- header -------------------------------- */
+header {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--hairline);
-  padding-bottom: 8px;
 }
-#ui p.hint {
-  /* no text-transform: it would capitalize ρ and δ into Ρ and Δ */
-  color: var(--dim); font-size: 10.5px; margin-top: 8px;
-  letter-spacing: 0.08em;
+h1 {
+  font: 400 12px var(--mono);
+  color: var(--ink);
+  text-transform: uppercase; letter-spacing: 0.28em;
 }
-.row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.row label {
-  flex: 0 0 52px; font-size: 10.5px; color: var(--dim);
-  letter-spacing: 0.12em;
+.pad-row {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 10px;
+  min-width: 200px; flex: 0 1 260px;
 }
-.row output { flex: 0 0 28px; text-align: right; font-variant-numeric: tabular-nums; }
+.pad-row label {
+  font: 10.5px var(--mono); color: var(--dim); letter-spacing: 0.12em;
+}
+.pad-row output {
+  font: 12px var(--mono); color: var(--ink);
+  min-width: 24px; text-align: right; font-variant-numeric: tabular-nums;
+}
 input[type="range"] {
   flex: 1; appearance: none; -webkit-appearance: none;
   height: 1px; background: var(--dim); outline: none;
 }
 input[type="range"]::-webkit-slider-thumb {
   appearance: none; -webkit-appearance: none;
-  width: 11px; height: 11px; border-radius: 0;
+  width: 15px; height: 15px; border-radius: 0;
   background: #000; border: 1px solid var(--ink); cursor: ew-resize;
 }
 input[type="range"]::-moz-range-thumb {
-  width: 9px; height: 9px; border-radius: 0;
+  width: 13px; height: 13px; border-radius: 0;
   background: #000; border: 1px solid var(--ink); cursor: ew-resize;
 }
-.row.check { gap: 8px; }
-.row.check label {
-  flex: 1; color: var(--ink); font-size: 10.5px; cursor: pointer;
-  letter-spacing: 0.12em;
+
+/* -------------------------------- stage -------------------------------- */
+#stage-wrap {
+  position: relative;
+  height: min(62vh, 560px); min-height: 340px;
+  border-bottom: 1px solid var(--hairline);
+  touch-action: none;
+  -webkit-user-select: none; user-select: none;
+  overflow: hidden;
 }
-input[type="checkbox"] {
-  appearance: none; -webkit-appearance: none;
-  width: 11px; height: 11px; border: 1px solid var(--ink);
-  background: #000; cursor: pointer; position: relative;
+svg#stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#refToggle {
+  position: absolute; transform: translate(-50%, -50%);
+  font: 10.5px var(--mono); letter-spacing: 0.12em;
+  color: var(--ink); background: rgba(0, 0, 0, 0.75);
+  border: 1px solid var(--dim); border-radius: 0;
+  padding: 7px 12px; cursor: pointer;
+  touch-action: manipulation;
 }
-input[type="checkbox"]:checked::after {
-  content: ""; position: absolute; inset: 2px; background: var(--ink);
+#refToggle:hover { border-color: var(--ink); }
+#stage-wrap .caption {
+  position: absolute; left: 12px; bottom: 8px; right: 12px;
+  font: 9.5px var(--mono); letter-spacing: 0.1em; color: var(--faint);
+  pointer-events: none;
 }
-/* Explainer: collapsible theory note; text is selectable so the CSS
-   recipes can be copied out. */
-.explainer {
-  margin-top: 12px; padding-top: 8px;
-  border-top: 1px solid var(--hairline);
-  -webkit-user-select: text; user-select: text;
+
+/* --------------------------- live CSS readout --------------------------- */
+#css-out {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--hairline);
 }
-.explainer summary {
-  font-size: 10.5px; color: var(--ink);
-  letter-spacing: 0.12em; cursor: pointer;
-  list-style: none;
-}
-.explainer summary::before { content: "+ "; color: var(--dim); }
-.explainer[open] summary::before { content: "\2212 "; }
-.explainer p {
-  color: var(--dim); font-size: 10.5px; margin-top: 8px;
-  letter-spacing: 0.04em;
-}
-.explainer em { font-style: normal; color: var(--ink); }
-.explainer pre {
-  margin-top: 8px; padding: 8px;
-  border: 1px solid var(--hairline);
-  color: var(--ink); font-size: 10px; line-height: 1.5;
+#css-out pre {
+  font: 12px/1.7 var(--mono); color: var(--ink);
   overflow-x: auto;
 }
 
-#ui footer {
-  margin-top: 12px; padding-top: 8px;
-  border-top: 1px solid var(--hairline);
-  font-size: 10px; color: var(--faint);
-  text-transform: uppercase; letter-spacing: 0.08em;
+/* ------------------------------ explainer ------------------------------- */
+.explainer {
+  max-width: 640px; margin: 0 auto;
+  padding: 28px 16px 8px;
 }
-#ui footer a { color: var(--dim); text-decoration: none; }
-#ui footer a:hover { color: var(--ink); }
+.explainer h2 {
+  font: 400 11px var(--mono); color: var(--ink);
+  text-transform: uppercase; letter-spacing: 0.24em;
+  margin-bottom: 12px;
+}
+.explainer p { margin: 12px 0; }
+.explainer em { font-style: normal; color: var(--ink); }
+.explainer pre {
+  font: 12px/1.7 var(--mono); color: var(--ink);
+  border: 1px solid var(--hairline);
+  padding: 10px 12px; margin: 12px 0;
+  overflow-x: auto;
+}
+.diagram {
+  display: block; width: 100%; max-width: 420px; height: auto;
+  margin: 16px auto;
+}
 
-@media (max-width: 560px) {
-  #ui { width: calc(100% - 24px); top: 12px; left: 12px; padding: 12px; }
-  #ui p.hint { display: none; }
+/* -------------------------------- footer -------------------------------- */
+footer {
+  padding: 20px 16px 28px; text-align: center;
+  font: 10px var(--mono); letter-spacing: 0.12em; color: var(--faint);
 }
+footer a { color: var(--dim); text-decoration: none; }
+footer a:hover { color: var(--ink); }
