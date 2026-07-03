@@ -8,8 +8,9 @@ A deterministic, vanilla-TypeScript riff on [@steveruizok's corner-radius demo](
 
 Two boxes, concentric corners. All four corners are **linked** — there is exactly one radius ρ, and it belongs to the **reference box** (toggle centered in the box swaps whether that's the outer or the inner one). The other box's radius is *derived* by the concentric rule, and the strip under the stage shows the **live CSS calculus** for that derived box.
 
-- Drag any round handle to set ρ (they all move together). While dragging, the chart shows construction circles for both radii around their shared center, dash-dot center lines, a radius leader, the ρ dimension along the edge, and the padding p as a narrow dimension with two inward-pointing arrows.
-- Drag the body to move, the square corner handles to resize, double-click a round handle for sharp corners, and set the padding with the slider in the header.
+- Drag any round handle to set ρ (they all move together). While dragging, the chart shows dotted construction circles for both radii around their shared center, dash-dot center lines, a radius leader, the ρ dimension along the edge, and the padding p as a narrow dimension with two inward-pointing arrows. All auxiliary construction is 0.5px hairline at 50% white.
+- Drag on any edge or anywhere in the padding area to set the padding — it follows the pointer's depth orthogonal to the grabbed edge. Square corner handles resize; double-click a round handle for sharp corners.
+- Mobile ergonomics: all drag targets auto-hide after ~4 idle seconds and reappear on any touch.
 
 ## Do you need trig? No — not even a square root
 

@@ -27,31 +27,6 @@ h1 {
   color: var(--ink);
   text-transform: uppercase; letter-spacing: 0.28em;
 }
-.pad-row {
-  margin-left: auto;
-  display: flex; align-items: center; gap: 10px;
-  min-width: 200px; flex: 0 1 260px;
-}
-.pad-row label {
-  font: 10.5px var(--mono); color: var(--dim); letter-spacing: 0.12em;
-}
-.pad-row output {
-  font: 12px var(--mono); color: var(--ink);
-  min-width: 24px; text-align: right; font-variant-numeric: tabular-nums;
-}
-input[type="range"] {
-  flex: 1; appearance: none; -webkit-appearance: none;
-  height: 1px; background: var(--dim); outline: none;
-}
-input[type="range"]::-webkit-slider-thumb {
-  appearance: none; -webkit-appearance: none;
-  width: 15px; height: 15px; border-radius: 0;
-  background: #000; border: 1px solid var(--ink); cursor: ew-resize;
-}
-input[type="range"]::-moz-range-thumb {
-  width: 13px; height: 13px; border-radius: 0;
-  background: #000; border: 1px solid var(--ink); cursor: ew-resize;
-}
 
 /* -------------------------------- stage -------------------------------- */
 #stage-wrap {
@@ -63,6 +38,14 @@ input[type="range"]::-moz-range-thumb {
   overflow: hidden;
 }
 svg#stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* Drag targets fade out after a few idle seconds (see main.ts) and any
+   touch or pointer movement brings them back. */
+#stage-wrap .handles, #refToggle, #stage-wrap .caption {
+  transition: opacity 0.5s ease;
+}
+#stage-wrap.idle .handles, #stage-wrap.idle #refToggle, #stage-wrap.idle .caption {
+  opacity: 0; pointer-events: none;
+}
 #refToggle {
   position: absolute; transform: translate(-50%, -50%);
   font: 10.5px var(--mono); letter-spacing: 0.12em;

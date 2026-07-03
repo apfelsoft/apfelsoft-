@@ -1,4 +1,4 @@
-import type { Corner, EdgeAxis, Point } from "./geometry";
+import type { Corner, EdgeAxis, Point, Rect } from "./geometry";
 import {
   CORNERS,
   arcCenter,
@@ -12,22 +12,32 @@ import { BASELINE, CAP, GLYPHS, SPACE_ADV } from "./hershey";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
+/** One of the outer box's four edges — the padding drag remembers which. */
+export type Edge = "top" | "right" | "bottom" | "left";
+
 /** What the pointer is currently dragging — drives the construction overlay. */
 export interface ActiveDrag {
-  role: "radius" | "resize" | "body";
+  role: "radius" | "resize" | "padding";
   corner?: Corner;
   axis?: EdgeAxis;
+  /** For padding drags: the edge being pushed... */
+  edge?: Edge;
+  /** ...and the pointer's coordinate ALONG that edge, for the dimension. */
+  at?: number;
 }
 
 /* ----------------------------- drawing inks ----------------------------- *
- * Line-on-black: everything is a stroke, nothing is filled (black fills on
- * handles exist only to occlude the lines running beneath them).
+ * Line-on-black. The boxes are full strokes; ALL auxiliary construction —
+ * center lines, spokes, dimensions — is 0.5px hairline at 50% white, and
+ * construction circles are dotted.
  */
-const INK = "#f2f2f2";        // the reference box and active construction
-const DIM = "#8f8f8f";        // the derived box, dimensions, labels
-const FAINT = "#565656";      // auxiliary construction lines
-const DASH_CONSTRUCT = "5 6";
-const DASH_CENTER = "16 4 3 4"; // CAD center-line: long dash, dot, …
+const INK = "#f2f2f2";                     // the boxes and handles
+const DIM = "#8f8f8f";                     // derived box, secondary UI
+const AUX = "rgba(255,255,255,0.5)";       // every auxiliary line
+const AUX_W = 0.5;
+const LABEL = "rgba(255,255,255,0.65)";    // lettering on aux geometry
+const DASH_CENTER = "16 4 3 4";            // CAD center-line: long dash, dot, …
+const DOTTED = "0.1 4.5";                  // round-cap dots for circles
 
 /** Create an SVG element with attributes, optionally appended to a parent. */
 function el<K extends keyof SVGElementTagNameMap>(
@@ -74,7 +84,7 @@ function hersheyText(
       d: glyph.d,
       transform: `translate(${cursor} ${-BASELINE})`,
       fill: "none",
-      stroke: opts.color ?? DIM,
+      stroke: opts.color ?? LABEL,
       "stroke-width": 1.1,
       "stroke-linecap": "round",
       "stroke-linejoin": "round",
@@ -86,18 +96,22 @@ function hersheyText(
 
 /* ------------------------- CAD drawing primitives ------------------------ */
 
-function line(parent: Element, a: Point, b: Point, stroke: string, extra: Record<string, string | number> = {}): void {
-  el("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke, "stroke-width": 1, ...extra }, parent);
+/** An auxiliary hairline: 0.5px at 50% white. */
+function auxLine(parent: Element, a: Point, b: Point, extra: Record<string, string | number> = {}): void {
+  el("line", {
+    x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+    stroke: AUX, "stroke-width": AUX_W, ...extra,
+  }, parent);
 }
 
 /** Open (two-stroke) arrowhead at `tip`, pointing along the unit vector u. */
-function arrowhead(parent: Element, tip: Point, u: Point, color: string): void {
+function arrowhead(parent: Element, tip: Point, u: Point): void {
   const L = 9, W = 3;
   for (const side of [1, -1]) {
-    line(parent, tip, {
+    auxLine(parent, tip, {
       x: tip.x - u.x * L + side * -u.y * W,
       y: tip.y - u.y * L + side * u.x * W,
-    }, color);
+    }, { "stroke-width": 0.75 });
   }
 }
 
@@ -118,16 +132,16 @@ function dimension(parent: Element, p1: Point, p2: Point, offset: number, label:
   const q1 = { x: p1.x + n.x * offset, y: p1.y + n.y * offset };
   const q2 = { x: p2.x + n.x * offset, y: p2.y + n.y * offset };
   const over = Math.sign(offset) * 4;
-  line(parent, p1, { x: q1.x + n.x * over, y: q1.y + n.y * over }, DIM);
-  line(parent, p2, { x: q2.x + n.x * over, y: q2.y + n.y * over }, DIM);
-  line(parent, q1, q2, DIM);
-  arrowhead(parent, q1, { x: -u.x, y: -u.y }, DIM);
-  arrowhead(parent, q2, u, DIM);
+  auxLine(parent, p1, { x: q1.x + n.x * over, y: q1.y + n.y * over });
+  auxLine(parent, p2, { x: q2.x + n.x * over, y: q2.y + n.y * over });
+  auxLine(parent, q1, q2);
+  arrowhead(parent, q1, { x: -u.x, y: -u.y });
+  arrowhead(parent, q2, u);
   const lift = 6;
   hersheyText(parent, label,
     (q1.x + q2.x) / 2 + n.x * Math.sign(offset) * lift,
     (q1.y + q2.y) / 2 + n.y * Math.sign(offset) * lift + 4,
-    11, { anchor: "middle", color: DIM });
+    11, { anchor: "middle" });
 }
 
 /**
@@ -142,27 +156,40 @@ function narrowDimension(parent: Element, p1: Point, p2: Point, label: string): 
   if (len < 1) return;
   const u = { x: dx / len, y: dy / len };
   const ext = 13;
-  line(parent,
+  auxLine(parent,
     { x: p1.x - u.x * ext, y: p1.y - u.y * ext },
-    { x: p2.x + u.x * ext, y: p2.y + u.y * ext }, DIM);
-  arrowhead(parent, p1, u, DIM);                      // outside, pointing in
-  arrowhead(parent, p2, { x: -u.x, y: -u.y }, DIM);   // outside, pointing in
-  // Letter the value beside the span, on the −n side (to the right of a
-  // downward measure) so it never crosses the dimension line.
+    { x: p2.x + u.x * ext, y: p2.y + u.y * ext });
+  arrowhead(parent, p1, u);                      // outside, pointing in
+  arrowhead(parent, p2, { x: -u.x, y: -u.y });   // outside, pointing in
+  // Letter the value beside the span, on the −n side so it never crosses
+  // the dimension line.
   const n = { x: -u.y, y: u.x };
   hersheyText(parent, label,
     (p1.x + p2.x) / 2 - n.x * 12,
     (p1.y + p2.y) / 2 - n.y * 12 + 4,
-    10, { color: DIM });
+    10, {});
 }
 
 /** CAD center mark: a small cross plus dash-dot center lines through c. */
 function centerMark(parent: Element, c: Point, reach: number): void {
   for (const [ux, uy] of [[1, 0], [0, 1]] as const) {
-    line(parent, { x: c.x - ux * 5, y: c.y - uy * 5 }, { x: c.x + ux * 5, y: c.y + uy * 5 }, INK);
-    line(parent, { x: c.x - ux * reach, y: c.y - uy * reach },
-      { x: c.x + ux * reach, y: c.y + uy * reach }, FAINT, { "stroke-dasharray": DASH_CENTER });
+    auxLine(parent, { x: c.x - ux * 5, y: c.y - uy * 5 }, { x: c.x + ux * 5, y: c.y + uy * 5 },
+      { "stroke-width": 0.75 });
+    auxLine(parent, { x: c.x - ux * reach, y: c.y - uy * reach },
+      { x: c.x + ux * reach, y: c.y + uy * reach }, { "stroke-dasharray": DASH_CENTER });
   }
+}
+
+/** A dotted construction circle. */
+function dottedCircle(parent: Element, c: Point, r: number, bright: boolean): void {
+  el("circle", {
+    cx: c.x, cy: c.y, r,
+    fill: "none",
+    stroke: bright ? "rgba(255,255,255,0.75)" : AUX,
+    "stroke-width": 0.75,
+    "stroke-dasharray": DOTTED,
+    "stroke-linecap": "round",
+  }, parent);
 }
 
 /* ------------------------------- the view -------------------------------- */
@@ -173,28 +200,26 @@ function centerMark(parent: Element, c: Point, reach: number): void {
  * function that redraws it from state plus the current drag, if any.
  */
 export function createView(stage: SVGSVGElement): (state: AppState, active: ActiveDrag | null) => void {
-  const gBoxes = el("g", {}, stage);
+  const gBoxes = el("g", { "pointer-events": "none" }, stage);
   const gGuides = el("g", { "pointer-events": "none" }, stage);
   const gAux = el("g", { "pointer-events": "none" }, stage);
-  const gHandles = el("g", {}, stage);
+  const gHit = el("g", {}, stage);
+  const gHandles = el("g", { class: "handles" }, stage);
 
-  // The outer box — its (unpainted) interior is draggable as the "body".
-  const outerPath = el("path", {
-    fill: "none",
-    "pointer-events": "fill",
-    stroke: INK,
-    "stroke-width": 1.6,
-    cursor: "move",
-  }, gBoxes);
-  outerPath.dataset.role = "body";
+  const outerPath = el("path", { fill: "none", stroke: INK, "stroke-width": 1.6 }, gBoxes);
+  const innerPath = el("path", { fill: "none", stroke: DIM, "stroke-width": 1.2 }, gBoxes);
 
-  // The inner box — never interactive; its radius is always derived or,
-  // when it is the reference, set through the handles that sit on it.
-  const innerPath = el("path", {
-    fill: "none",
-    stroke: DIM,
-    "stroke-width": 1.2,
-  }, gBoxes);
+  // The padding area — the ring between (slightly outside) the outer box
+  // and the inner box. Dragging anywhere in it, or on an edge, sets the
+  // padding orthogonally to that edge. fill-rule evenodd punches the inner
+  // box out of the hit region.
+  const paddingHit = el("path", {
+    fill: "transparent",
+    "fill-rule": "evenodd",
+    stroke: "none",
+    cursor: "crosshair",
+  }, gHit);
+  paddingHit.dataset.role = "padding";
 
   // Square resize handles on the outer box's corners.
   const cornerHandles = {} as Record<Corner, SVGRectElement>;
@@ -240,16 +265,10 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       : [[ρIn, true], [ρOut, false]];
     for (const [r, isRef] of circles) {
       if (r < 1) continue;
-      el("circle", {
-        cx: c.x, cy: c.y, r,
-        fill: "none",
-        stroke: isRef ? INK : FAINT,
-        "stroke-width": 1,
-        ...(isRef ? {} : { "stroke-dasharray": DASH_CONSTRUCT }),
-      }, gAux);
+      dottedCircle(gAux, c, r, isRef);
       hersheyText(gAux, `R${Math.round(r)}`,
         c.x + r * diag + 5, c.y - r * diag - 4, 10,
-        { color: isRef ? INK : DIM });
+        { color: isRef ? INK : LABEL });
     }
 
     // Radius leader: center → the handle being dragged, arrow at the rim.
@@ -257,8 +276,8 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     const handle = arcStartPoint(ref, corner, axis, ρRef);
     if (ρRef > 1) {
       const u = { x: (handle.x - c.x) / ρRef, y: (handle.y - c.y) / ρRef };
-      line(gAux, c, handle, INK);
-      arrowhead(gAux, handle, u, INK);
+      auxLine(gAux, c, handle, { "stroke-width": 0.75 });
+      arrowhead(gAux, handle, u);
     }
 
     // Distance from the reference box's corner to the arc start (= ρ),
@@ -279,8 +298,7 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     }
     dimension(gAux, cornerPt, handle, offset, String(Math.round(ρRef)));
 
-    // The padding, measured between the two top edges mid-box — narrow
-    // style with inward-pointing arrows since p is small.
+    // The padding, narrow style with inward-pointing arrows.
     const midX = state.rect.x + state.rect.w / 2;
     narrowDimension(gAux,
       { x: midX, y: state.rect.y },
@@ -288,18 +306,36 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       `p=${state.padding}`);
   }
 
+  /** The padding dimension while dragging in the padding area. */
+  function drawPaddingAux(state: AppState, edge: Edge, at: number): void {
+    const { x, y, w, h } = state.rect;
+    const p = state.padding;
+    const ρOut = outerRadius(state);
+    // Keep the dimension on the straight part of the edge, clear of arcs.
+    const clampAlong = (v: number, lo: number, hi: number) =>
+      Math.max(lo, Math.min(v, hi));
+    let p1: Point, p2: Point;
+    if (edge === "top" || edge === "bottom") {
+      const ax = clampAlong(at, x + ρOut + 14, x + w - ρOut - 14);
+      const edgeY = edge === "top" ? y : y + h;
+      const inY = edge === "top" ? edgeY + p : edgeY - p;
+      p1 = { x: ax, y: edgeY };
+      p2 = { x: ax, y: inY };
+    } else {
+      const ay = clampAlong(at, y + ρOut + 14, y + h - ρOut - 14);
+      const edgeX = edge === "left" ? x : x + w;
+      const inX = edge === "left" ? edgeX + p : edgeX - p;
+      p1 = { x: edgeX, y: ay };
+      p2 = { x: inX, y: ay };
+    }
+    narrowDimension(gAux, p1, p2, `p=${p}`);
+  }
+
   /** Width/height dimensions while resizing. */
   function drawResizeAux(state: AppState): void {
     const { x, y, w, h } = state.rect;
     dimension(gAux, { x, y: y + h }, { x: x + w, y: y + h }, 30, String(w));  // below
     dimension(gAux, { x: x + w, y: y + h }, { x: x + w, y }, 30, String(h));  // right
-  }
-
-  /** Position readout while moving the whole box. */
-  function drawBodyAux(state: AppState): void {
-    const { x, y } = state.rect;
-    centerMark(gAux, { x, y }, 18);
-    hersheyText(gAux, `${x},${y}`, x - 8, y - 12, 11, { anchor: "end", color: DIM });
   }
 
   return function render(state: AppState, active: ActiveDrag | null): void {
@@ -313,6 +349,15 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     outerPath.setAttribute("stroke", state.ref === "outer" ? INK : DIM);
     innerPath.setAttribute("stroke", state.ref === "inner" ? INK : DIM);
 
+    // Padding hit ring: from 10px outside the outer edge down to the inner
+    // box (evenodd punches the inner region out).
+    const outerHit: Rect = {
+      x: state.rect.x - 10, y: state.rect.y - 10,
+      w: state.rect.w + 20, h: state.rect.h + 20,
+    };
+    paddingHit.setAttribute("d",
+      `${roundedRectPath(outerHit, uniformRadii(0))} ${roundedRectPath(inner, uniformRadii(ρIn))}`);
+
     // Idle guides: the shared center mark in each corner.
     gGuides.textContent = "";
     if (!active) {
@@ -320,7 +365,8 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
         if (ρOut < 2) break;
         const c = arcCenter(state.rect, corner, ρOut);
         for (const [ux, uy] of [[1, 0], [0, 1]] as const) {
-          line(gGuides, { x: c.x - ux * 5, y: c.y - uy * 5 }, { x: c.x + ux * 5, y: c.y + uy * 5 }, DIM);
+          auxLine(gGuides, { x: c.x - ux * 5, y: c.y - uy * 5 }, { x: c.x + ux * 5, y: c.y + uy * 5 },
+            { "stroke-width": 0.75 });
         }
       }
     }
@@ -329,10 +375,10 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     gAux.textContent = "";
     if (active?.role === "radius" && active.corner && active.axis) {
       drawRadiusAux(state, active.corner, active.axis);
+    } else if (active?.role === "padding" && active.edge && active.at !== undefined) {
+      drawPaddingAux(state, active.edge, active.at);
     } else if (active?.role === "resize") {
       drawResizeAux(state);
-    } else if (active?.role === "body") {
-      drawBodyAux(state);
     }
 
     // Handles: resize squares on the outer box, radius handles on the

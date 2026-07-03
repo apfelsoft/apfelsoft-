@@ -68,3 +68,12 @@ export function clampLinkedRadius(s: AppState, requested: number): number {
   const r = refRect(s);
   return Math.max(0, Math.min(requested, Math.floor(Math.min(r.w, r.h) / 2)));
 }
+
+/**
+ * The padding must leave an inner box behind: at least 4px of padding, and
+ * at least 24px of inner box on the outer box's shortest side.
+ */
+export function clampPadding(s: AppState, requested: number): number {
+  const maxP = Math.floor((Math.min(s.rect.w, s.rect.h) - 24) / 2);
+  return Math.max(4, Math.min(requested, maxP));
+}
