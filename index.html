@@ -89,6 +89,15 @@
   </div>
 
   <p>
+    One more subtlety the shapes expose: the −p rule and the TRUE parallel
+    offset (constant orthogonal padding) coincide <em>only for round
+    corners</em>. A squircle reduced by p bulges ~19% wide of the true
+    offset at the diagonal, a catenary ~4% — the dotted curve while
+    dragging shows the true offset. CSS approximates the shapes with
+    corner-shape: squircle is superellipse(2) exactly; catenary ≈
+    superellipse(1.17).
+  </p>
+  <p>
     The clamp is where roundness dies, and it is lossy: once p ≥ ρ the inner
     corner is square, and from a square inner corner the outer radius can only
     be bounded (ρ ≤ p), never recovered. The only square root anywhere is

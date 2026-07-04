@@ -75,27 +75,24 @@ fn vs(@builtin(vertex_index) i: u32) -> VSOut {
 // Signed ray crossings of one quadratic curve, ray from the origin
 // toward +x (curve given relative to the sample point). The heart of
 // the Slug technique: roots of the curve's y(t), x tested per root.
+//
+// The roots use the numerically STABLE split (Citardauq): the naive
+// (b ± √(b²−ac))/a cancels catastrophically in f32 when a ≈ 0 — which
+// is every nearly-straight segment here — and the noise lands bogus
+// roots inside [0,1), breaking winding parity for whole scanlines
+// (the full-width stripe artifact). q = b + sign(b)·√disc keeps both
+// roots stable, and degenerates gracefully to the exact line case at
+// a = 0 with no special branch at all.
 fn winding(q0: vec2f, q1: vec2f, q2: vec2f) -> i32 {
   let a = q0 - 2.0 * q1 + q2;
   let b = q0 - q1;
   let c = q0;
-  var w = 0;
-  if (abs(a.y) < 1e-5) {
-    // Degenerate to a line in y.
-    if (abs(b.y) > 1e-9) {
-      let t = c.y / (2.0 * b.y);
-      if (t >= 0.0 && t < 1.0) {
-        let x = (a.x * t - 2.0 * b.x) * t + c.x;
-        if (x > 0.0) { w += select(-1, 1, b.y < 0.0); }
-      }
-    }
-    return w;
-  }
   let disc = b.y * b.y - a.y * c.y;
   if (disc <= 0.0) { return 0; }
-  let s = sqrt(disc);
-  let t1 = (b.y - s) / a.y;
-  let t2 = (b.y + s) / a.y;
+  let q = b.y + sign(b.y) * sqrt(disc);
+  let t1 = q / a.y;   // → ±inf for line segments: harmlessly rejected
+  let t2 = c.y / q;   // → the stable (line) root
+  var w = 0;
   if (t1 >= 0.0 && t1 < 1.0) {
     let x = (a.x * t1 - 2.0 * b.x) * t1 + c.x;
     let dy = a.y * t1 - b.y;

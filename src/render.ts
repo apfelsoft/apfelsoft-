@@ -3,6 +3,7 @@ import {
   CORNERS,
   arcCenter,
   arcStartPoint,
+  outlineSamples,
   roundedRectPath,
   uniformRadii,
 } from "./geometry";
@@ -212,7 +213,6 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
   const DOT_R = coarse ? 6 : 4.5;
   const SQUARE = coarse ? 13 : 9;
 
-  const gGuides = el("g", { "pointer-events": "none" }, stage);
   const gAux = el("g", { "pointer-events": "none" }, stage);
   const gHit = el("g", {}, stage);
   const gHandles = el("g", { class: "handles" }, stage);
@@ -283,7 +283,7 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     const ρOut = outerRadius(state);
     const ρIn = innerRadius(state);
     if (ρOut < 2) return;
-    const pSeg = Math.min(state.padding, ρOut); // clamped corners cap the row
+    const pSeg = state.padding; // full length — when clamped it simply outgrows line A
     const onTop = corner === "tl" || corner === "tr";
     const onLeft = corner === "tl" || corner === "bl";
     const cx = onLeft ? state.rect.x + ρOut : state.rect.x + state.rect.w - ρOut;
@@ -301,7 +301,7 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     auxLine(gAux, { x: xB, y: yEdge }, { x: xB, y: yEdge + dir * (pSeg + ρIn) }, { "stroke-width": 0.75 });
     tick(xB, yEdge);
     tick(xB, yEdge + dir * pSeg);
-    if (ρIn > 0) tick(xB, yEdge + dir * (pSeg + ρIn));
+    tick(xB, yEdge + dir * (pSeg + ρIn));
 
     // Each value lettered exactly once, centered ON its measurement line
     // (the knockout masks the line behind the number with an even gap).
@@ -309,10 +309,53 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       { anchor: "middle", knockout: true, color: state.ref === "outer" ? INK : LABEL });
     hersheyText(gAux, String(state.padding), xB, yEdge + dir * (pSeg / 2) + 4, 10,
       { anchor: "middle", knockout: true });
-    if (ρIn > 0) {
-      hersheyText(gAux, String(ρIn), xB, yEdge + dir * (pSeg + ρIn / 2) + 4, 10,
-        { anchor: "middle", knockout: true, color: state.ref === "inner" ? INK : LABEL });
+    // The inner radius is always lettered — a clamped corner reads "0",
+    // placed just past the row's end where a zero-length segment can't
+    // center it.
+    const innerMid = ρIn >= 14
+      ? yEdge + dir * (pSeg + ρIn / 2) + 4
+      : yEdge + dir * (pSeg + ρIn + 14) + 4;
+    hersheyText(gAux, String(ρIn), xB, innerMid, 10,
+      { anchor: "middle", knockout: true, color: state.ref === "inner" ? INK : LABEL });
+  }
+
+  /**
+   * The TRUE constant-orthogonal offset of the reference outline, dotted.
+   * The −p radius rule (what CSS can express) coincides with it only for
+   * round corners; for squircle/catenary the derived box deviates near the
+   * diagonal (~19% / ~4% of p), and this curve shows by how much.
+   */
+  function drawTrueOffset(state: AppState): void {
+    if (state.shape === "round") return;
+    const fromOuter = state.ref === "outer";
+    const src = fromOuter
+      ? outlineSamples(state.rect, outerRadius(state), state.shape)
+      : outlineSamples(innerRect(state), innerRadius(state), state.shape);
+    const rect = fromOuter ? state.rect : innerRect(state);
+    const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+    const p = state.padding;
+    const n = src.length;
+    const pts: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const [px, py] = src[i];
+      const [ax, ay] = src[(i - 1 + n) % n];
+      const [bx, by] = src[(i + 1) % n];
+      let nx = by - ay, ny = -(bx - ax);
+      const len = Math.hypot(nx, ny) || 1;
+      nx /= len; ny /= len;
+      // Point the normal inward for outer→inner, outward for inner→outer.
+      const toCenter = (cx - px) * nx + (cy - py) * ny;
+      const sign = (fromOuter ? 1 : -1) * Math.sign(toCenter || 1);
+      pts.push(`${(px + sign * nx * p).toFixed(1)},${(py + sign * ny * p).toFixed(1)}`);
     }
+    el("path", {
+      d: `M ${pts.join(" L ")} Z`,
+      fill: "none",
+      stroke: AUX,
+      "stroke-width": 0.75,
+      "stroke-dasharray": DOTTED,
+      "stroke-linecap": "round",
+    }, gAux);
   }
 
   /** Construction overlay for an in-progress radius drag. */
@@ -343,6 +386,7 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       { x: midX, y: state.rect.y },
       { x: midX, y: state.rect.y + state.padding });
 
+    drawTrueOffset(state);
     radiiCompare(state, corner);
   }
 
@@ -369,6 +413,7 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       p2 = { x: inX, y: ay };
     }
     narrowDimension(gAux, p1, p2);
+    drawTrueOffset(state);
     // Anchor the comparison at the corner that starts the grabbed edge.
     const corner: Corner = edge === "top" ? "tl" : edge === "right" ? "tr" : edge === "bottom" ? "br" : "bl";
     radiiCompare(state, corner);
@@ -382,7 +427,6 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
   }
 
   return function render(state: AppState, active: ActiveDrag | null): void {
-    const ρOut = outerRadius(state);
     const ρIn = innerRadius(state);
     const inner = innerRect(state);
 
@@ -394,19 +438,6 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     };
     paddingHit.setAttribute("d",
       `${roundedRectPath(outerHit, uniformRadii(0))} ${roundedRectPath(inner, uniformRadii(ρIn))}`);
-
-    // Idle guides: the shared center mark in each corner.
-    gGuides.textContent = "";
-    if (!active) {
-      for (const corner of CORNERS) {
-        if (ρOut < 2) break;
-        const c = arcCenter(state.rect, corner, ρOut);
-        for (const [ux, uy] of [[1, 0], [0, 1]] as const) {
-          auxLine(gGuides, { x: c.x - ux * 5, y: c.y - uy * 5 }, { x: c.x + ux * 5, y: c.y + uy * 5 },
-            { "stroke-width": 0.75 });
-        }
-      }
-    }
 
     // Construction overlay during a drag.
     gAux.textContent = "";

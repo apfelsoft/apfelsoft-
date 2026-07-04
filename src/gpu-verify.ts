@@ -65,12 +65,21 @@ async function run(): Promise<void> {
     };
     let total = 0;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (px[y * bpr + x * 4] > 60) total++;
+    // Stripe detector: interior scanlines (clear of the top/bottom stroke)
+    // must never be mostly lit — that is the broken-winding signature.
+    let stripes = 0;
+    for (let y = 58; y < 242; y++) {
+      let lit = 0;
+      for (let x = 55; x < 345; x++) if (px[y * bpr + x * 4] > 60) lit++;
+      if (lit > 145) stripes++;
+    }
     verdict[shape] = {
       topEdge: litAt(200, 50),
       leftEdge: litAt(50, 150),
       cornerArc: litAt(68, 68),          // ~45° point of a 60px round corner
       centerDark: !litAt(200, 150),
       cornerPointDark: !litAt(52, 52),   // the sharp corner point itself must be cut
+      stripes,                            // broken-winding rows — must be 0
       total,
     };
     rb.unmap();

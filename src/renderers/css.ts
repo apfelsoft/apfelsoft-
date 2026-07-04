@@ -43,13 +43,16 @@ export function createCssRenderer(): SceneRenderer {
       inner.style.borderColor = s.ref === "inner" ? BOX_INK : BOX_DIM;
       outer.style.borderWidth = `${OUTER_W}px`;
       inner.style.borderWidth = `${INNER_W}px`;
-      // Corner shape: CSS has corner-shape for squircle (newer engines);
-      // a catenary corner has no CSS equivalent, so the CSS tab shows it
-      // round — the live strip says so.
-      const cs = s.shape === "squircle" && CSS.supports("corner-shape", "squircle")
-        ? "squircle" : "";
-      outer.style.setProperty("corner-shape", cs);
-      inner.style.setProperty("corner-shape", cs);
+      // Corner shape in CSS: squircle is corner-shape's superellipse(2);
+      // the catenary corner is approximated by superellipse(1.171) — the
+      // exponent that matches its diagonal fullness (0.265 of ρ vs round's
+      // 0.293). Engines without corner-shape fall back to round; the live
+      // strip says which is happening.
+      const cs = s.shape === "squircle" ? "squircle"
+        : s.shape === "catenary" ? "superellipse(1.171)" : "";
+      const supported = cs !== "" && CSS.supports("corner-shape", cs);
+      outer.style.setProperty("corner-shape", supported ? cs : "");
+      inner.style.setProperty("corner-shape", supported ? cs : "");
       // The chrome measures the padding to the inner box's OUTLINE; the
       // outer border sits inside the box, so back it out of the padding.
       outer.style.padding = `calc(var(--p) - ${OUTER_W}px)`;

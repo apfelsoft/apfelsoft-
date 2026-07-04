@@ -121,9 +121,12 @@ function persistURL(): void {
  * ------------------------------------------------------------------------ */
 
 function shapeNote(s: AppState): string {
-  if (s.shape === "squircle") return `\n.outer, .inner { corner-shape: squircle; }`;
-  if (s.shape === "catenary") return `\n/* catenary corner: no CSS equivalent — CSS tab shows round */`;
-  return "";
+  if (s.shape === "round") return "";
+  const cs = s.shape === "squircle" ? "squircle" : "superellipse(1.171)";
+  const note = s.shape === "catenary" ? "  /* \u2248 catenary */" : "";
+  const support = CSS.supports("corner-shape", cs)
+    ? "" : "\n/* corner-shape unsupported here \u2192 CSS tab shows round */";
+  return `\n.outer, .inner { corner-shape: ${cs}; }${note}${support}`;
 }
 
 function cssCalculus(s: AppState): string {
