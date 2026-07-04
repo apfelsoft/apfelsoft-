@@ -352,6 +352,8 @@ function endDrag(e: PointerEvent): void {
   clearTimeout(longPress);
   if (!drag) return;
   drag = null;
+  idleMs = 2000; // first edit is done — auto-hide twice as fast from now on
+  wake();        // re-arm the idle timer with the shorter delay
   atLimit = false;
   if (stage.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId);
   sync(); // drop the construction overlay
@@ -409,7 +411,10 @@ document.querySelectorAll<HTMLButtonElement>(".copy-btn").forEach((btn) => {
  *  Mobile ergonomics: auto-hide the drag targets after a few idle seconds
  * ------------------------------------------------------------------------ */
 
-const IDLE_MS = 4000;
+// Generous before the first edit; once the user has completed one gesture
+// they know where the targets are, so the chrome gets out of the way 50%
+// faster.
+let idleMs = 4000;
 let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
 function wake(): void {
@@ -418,7 +423,7 @@ function wake(): void {
   idleTimer = setTimeout(() => {
     if (drag) { wake(); return; } // never hide mid-drag
     stageWrap.classList.add("idle");
-  }, IDLE_MS);
+  }, idleMs);
 }
 stageWrap.addEventListener("pointerdown", wake);
 stageWrap.addEventListener("pointermove", wake);

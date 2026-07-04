@@ -441,6 +441,19 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
 
     // Construction overlay during a drag.
     gAux.textContent = "";
+    if (active) {
+      // The shared corner centers show whenever something is being edited.
+      const ρOut = outerRadius(state);
+      if (ρOut >= 2) {
+        for (const corner of CORNERS) {
+          const c = arcCenter(state.rect, corner, ρOut);
+          for (const [ux, uy] of [[1, 0], [0, 1]] as const) {
+            auxLine(gAux, { x: c.x - ux * 5, y: c.y - uy * 5 }, { x: c.x + ux * 5, y: c.y + uy * 5 },
+              { "stroke-width": 0.75 });
+          }
+        }
+      }
+    }
     if (active?.role === "radius" && active.corner && active.axis) {
       drawRadiusAux(state, active.corner, active.axis);
     } else if (active?.role === "padding" && active.edge && active.at !== undefined) {
