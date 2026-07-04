@@ -2,7 +2,6 @@ import "./style.css";
 import { createCanvas2dRenderer } from "./renderers/canvas2d";
 import { createCssRenderer } from "./renderers/css";
 import { createSvgRenderer } from "./renderers/svg";
-import { createWebGpuRenderer } from "./renderers/webgpu";
 import type { SceneRenderer } from "./renderers/types";
 import { initParallax } from "./parallax";
 import type { Corner, CornerShape, EdgeAxis, Point } from "./geometry";
@@ -36,11 +35,29 @@ const state = initialState(stageWrap.clientWidth, stageWrap.clientHeight);
 
 const MODES = ["css", "canvas", "svg", "webgpu"] as const;
 type Mode = (typeof MODES)[number];
+/**
+ * The WebGPU/Slug renderer pulls in TypeGPU, so it loads lazily on first
+ * activation — the base bundle stays small for the mobile-first default.
+ */
+function lazyWebGpu(): SceneRenderer {
+  let real: SceneRenderer | null = null;
+  return {
+    label: "WEBGPU · SLUG",
+    supported: typeof navigator !== "undefined" && !!navigator.gpu,
+    async mount(host) {
+      real ??= (await import("./renderers/webgpu")).createWebGpuRenderer();
+      await real.mount(host);
+    },
+    draw(state) { real?.draw(state); },
+    unmount() { real?.unmount(); },
+  };
+}
+
 const renderers: Record<Mode, SceneRenderer> = {
   css: createCssRenderer(),
   canvas: createCanvas2dRenderer(),
   svg: createSvgRenderer(),
-  webgpu: createWebGpuRenderer(),
+  webgpu: lazyWebGpu(),
 };
 let mode: Mode = "css";
 

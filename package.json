@@ -13,5 +13,8 @@
     "hersheytext": "^2.0.0",
     "typescript": "^5.7.0",
     "vite": "^6.3.0"
+  },
+  "dependencies": {
+    "typegpu": "^0.11.9"
   }
 }
