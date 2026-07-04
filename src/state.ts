@@ -1,4 +1,4 @@
-import type { Rect } from "./geometry";
+import type { CornerShape, Rect } from "./geometry";
 import { concentricRadius } from "./geometry";
 
 /** Which box owns the reference radius; the other box's radius is derived. */
@@ -19,6 +19,8 @@ export interface AppState {
   padding: number;
   /** Which box the radius belongs to. */
   ref: RefBox;
+  /** How every corner turns its 90° (all corners linked). */
+  shape: CornerShape;
 }
 
 /** The outer box can never be resized smaller than this, per side. */
@@ -38,6 +40,7 @@ export function initialState(stageW: number, stageH: number): AppState {
     radius: 48,
     padding: 24,
     ref: "outer",
+    shape: "round",
   };
 }
 

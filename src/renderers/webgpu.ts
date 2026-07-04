@@ -1,4 +1,4 @@
-import type { Rect } from "../geometry";
+import { outlineSamples } from "../geometry";
 import type { AppState } from "../state";
 import { innerRadius, innerRect, outerRadius } from "../state";
 import { INNER_W, OUTER_W, type SceneRenderer } from "./types";
@@ -10,29 +10,6 @@ import { INNER_W, OUTER_W, type SceneRenderer } from "./types";
  * closed polyline and extruded into a constant-width triangle-strip ribbon.)
  */
 
-const SEGS = 16; // arc segments per corner
-
-/** Closed outline of a rounded rect as points, clockwise. */
-function outlinePoints(rect: Rect, ρ: number): Array<[number, number]> {
-  const { x, y, w, h } = rect;
-  const r = Math.min(ρ, w / 2, h / 2);
-  const pts: Array<[number, number]> = [];
-  // Corner arc centers in drawing order with their start angles (radians;
-  // y-down screen coords, angles advance clockwise).
-  const corners: Array<[cx: number, cy: number, a0: number]> = [
-    [x + w - r, y + r, -Math.PI / 2],      // tr: from "up" to "right"
-    [x + w - r, y + h - r, 0],             // br
-    [x + r, y + h - r, Math.PI / 2],       // bl
-    [x + r, y + r, Math.PI],               // tl
-  ];
-  for (const [cx, cy, a0] of corners) {
-    for (let i = 0; i <= SEGS; i++) {
-      const a = a0 + (i / SEGS) * (Math.PI / 2);
-      pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
-    }
-  }
-  return pts;
-}
 
 /**
  * Extrude a closed polyline into a triangle-strip ribbon of width `w`,
@@ -159,9 +136,9 @@ export function createWebGpuRenderer(): SceneRenderer {
 
       const ink: [number, number, number, number] = [0.95, 0.95, 0.95, 1];
       const dim: [number, number, number, number] = [0.56, 0.56, 0.56, 1];
-      const outerVerts = ribbon(outlinePoints(s.rect, outerRadius(s)), OUTER_W,
+      const outerVerts = ribbon(outlineSamples(s.rect, outerRadius(s), s.shape), OUTER_W,
         s.ref === "outer" ? ink : dim);
-      const innerVerts = ribbon(outlinePoints(innerRect(s), innerRadius(s)), INNER_W,
+      const innerVerts = ribbon(outlineSamples(innerRect(s), innerRadius(s), s.shape), INNER_W,
         s.ref === "inner" ? ink : dim);
       const data = new Float32Array([...outerVerts, ...innerVerts]);
       if (!vertexBuf || vertexCap < data.byteLength) {

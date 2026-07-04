@@ -1,4 +1,4 @@
-import { roundedRectPath, uniformRadii } from "../geometry";
+import { boxPath } from "../geometry";
 import type { AppState } from "../state";
 import { innerRadius, innerRect, outerRadius } from "../state";
 import { BOX_DIM, BOX_INK, INNER_W, OUTER_W, type SceneRenderer } from "./types";
@@ -30,8 +30,8 @@ export function createSvgRenderer(): SceneRenderer {
 
     draw(s: AppState) {
       if (!outer || !inner) return;
-      outer.setAttribute("d", roundedRectPath(s.rect, uniformRadii(outerRadius(s))));
-      inner.setAttribute("d", roundedRectPath(innerRect(s), uniformRadii(innerRadius(s))));
+      outer.setAttribute("d", boxPath(s.rect, outerRadius(s), s.shape));
+      inner.setAttribute("d", boxPath(innerRect(s), innerRadius(s), s.shape));
       outer.setAttribute("stroke", s.ref === "outer" ? BOX_INK : BOX_DIM);
       inner.setAttribute("stroke", s.ref === "inner" ? BOX_INK : BOX_DIM);
     },

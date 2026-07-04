@@ -22,7 +22,12 @@
   <div id="scene-host" aria-hidden="true"></div>
   <svg id="stage"></svg>
   <button id="refToggle" type="button">REF: OUTER ⇄</button>
-  <p class="caption">ROUND HANDLES = RADIUS (ALL CORNERS LINKED) · EDGES &amp; PADDING AREA = PADDING · SQUARES = RESIZE · DBL-CLICK = SHARP</p>
+  <div id="shapeMenu" hidden>
+    <button type="button" data-shape="round" aria-pressed="true">ROUND</button>
+    <button type="button" data-shape="squircle" aria-pressed="false">SQUIRCLE</button>
+    <button type="button" data-shape="catenary" aria-pressed="false">CATENARY 90°</button>
+  </div>
+  <p class="caption">ROUND HANDLES = RADIUS (LINKED) · EDGES = PADDING · SQUARES = RESIZE (CENTERED) · DBL-CLICK = SHARP · LONG-PRESS CORNER = SHAPE</p>
 </div>
 
 <section id="css-out" aria-label="Live CSS for the derived box">

@@ -35,6 +35,106 @@ export type Radii = Record<Corner, number>;
 export const uniformRadii = (ρ: number): Radii => ({ tl: ρ, tr: ρ, br: ρ, bl: ρ });
 
 /**
+ * How a corner turns its 90°:
+ *  - round:    a circular quarter arc.
+ *  - squircle: a superellipse quarter (|s|⁴ + |c|⁴ = 1) — the iOS look.
+ *  - catenary: a segment of y = cosh(x) between the points where its slope
+ *    is ∓1 (a 90° total turn), rotated 45° so the end tangents meet both
+ *    edges exactly — the "90° target angle".
+ * All three start and end at the same arc start points ρ from the corner,
+ * tangent to the edges, so the concentric subtraction rule is untouched.
+ */
+export type CornerShape = "round" | "squircle" | "catenary";
+export const SHAPES: readonly CornerShape[] = ["round", "squircle", "catenary"];
+
+/** Samples per corner for the non-arc shapes. */
+const CORNER_SAMPLES = 24;
+
+/**
+ * Unit corner curve in top-left-corner local coordinates (corner at (0,0),
+ * +u toward the box interior along x, +v along y): runs from (0, 1) on the
+ * vertical edge to (1, 0) on the horizontal edge, tangent to both.
+ */
+function unitCorner(shape: CornerShape): Array<[number, number]> {
+  const pts: Array<[number, number]> = [];
+  if (shape === "squircle") {
+    const n = 4; // squircle exponent
+    for (let i = 0; i <= CORNER_SAMPLES; i++) {
+      const t = (i / CORNER_SAMPLES) * (Math.PI / 2);
+      pts.push([1 - Math.cos(t) ** (2 / n), 1 - Math.sin(t) ** (2 / n)]);
+    }
+    return pts;
+  }
+  if (shape === "catenary") {
+    // y = cosh(x) for x ∈ [−x₁, x₁] with sinh(x₁) = 1 turns exactly 90°.
+    const x1 = Math.asinh(1);
+    const raw: Array<[number, number]> = [];
+    for (let i = 0; i <= CORNER_SAMPLES; i++) {
+      const x = -x1 + (2 * x1 * i) / CORNER_SAMPLES;
+      raw.push([x, Math.cosh(x)]);
+    }
+    // Rotate +45°: the end tangents (∓45°) become 0° and 90°.
+    const c = Math.SQRT1_2;
+    const rot = raw.map(([x, y]): [number, number] => [x * c - y * c, x * c + y * c]);
+    // Map endpoint A (horizontal tangent) onto the horizontal edge point
+    // (1, 0) and endpoint B (vertical tangent) onto (0, 1). The chord of
+    // the rotated curve runs along (1, 1) with Δx = Δy, so one uniform
+    // scale s plus an x-mirror does it — both preserve edge tangency, and
+    // the convex side lands toward the corner like the other shapes.
+    const [ax, ay] = rot[0];
+    const [bx] = rot[rot.length - 1];
+    const s = 1 / (bx - ax);
+    const out = rot.map(([x, y]): [number, number] => [1 - (x - ax) * s, (y - ay) * s]);
+    // Pin the ends exactly against float noise, then order (0,1) → (1,0).
+    out[0] = [1, 0];
+    out[out.length - 1] = [0, 1];
+    return out.reverse();
+  }
+  // round: quarter circle about (1, 1)
+  for (let i = 0; i <= CORNER_SAMPLES; i++) {
+    const a = Math.PI + (i / CORNER_SAMPLES) * (Math.PI / 2);
+    pts.push([1 + Math.cos(a), 1 + Math.sin(a)]);
+  }
+  return pts;
+}
+
+const UNIT_CORNERS: Record<CornerShape, Array<[number, number]>> = {
+  round: unitCorner("round"),
+  squircle: unitCorner("squircle"),
+  catenary: unitCorner("catenary"),
+};
+
+/**
+ * The full closed outline of a box with uniform corner radius ρ and the
+ * given corner shape, as a clockwise polyline in pixel space. Every scene
+ * renderer that can't consume an SVG path (WebGPU) walks these points.
+ */
+export function outlineSamples(rect: Rect, ρ: number, shape: CornerShape): Array<[number, number]> {
+  const { x, y, w, h } = rect;
+  const r = Math.max(0, Math.min(ρ, w / 2, h / 2));
+  const unit = UNIT_CORNERS[shape];
+  const pts: Array<[number, number]> = [];
+  // tl corner runs (0,1)→(1,0); the other corners reuse it mirrored, in
+  // clockwise walking order starting from the top edge.
+  const rev = [...unit].reverse();
+  for (const [u, v] of unit) pts.push([x + u * r, y + v * r]);            // tl
+  for (const [u, v] of rev) pts.push([x + w - u * r, y + v * r]);         // tr
+  for (const [u, v] of unit) pts.push([x + w - u * r, y + h - v * r]);    // br
+  for (const [u, v] of rev) pts.push([x + u * r, y + h - v * r]);         // bl
+  return pts;
+}
+
+/**
+ * SVG path for a box with uniform ρ and a corner shape: crisp A-arcs for
+ * round, sampled polylines for the analytic shapes.
+ */
+export function boxPath(rect: Rect, ρ: number, shape: CornerShape): string {
+  if (shape === "round") return roundedRectPath(rect, uniformRadii(Math.max(0, Math.min(ρ, rect.w / 2, rect.h / 2))));
+  const pts = outlineSamples(rect, ρ, shape);
+  return `M ${pts.map(([px, py]) => `${px.toFixed(2)},${py.toFixed(2)}`).join(" L ")} Z`;
+}
+
+/**
  * Which of a corner's two edges something sits on:
  * "h" = its horizontal edge (top or bottom), "v" = its vertical edge (left or right).
  */

@@ -5,8 +5,8 @@ import { createSvgRenderer } from "./renderers/svg";
 import { createWebGpuRenderer } from "./renderers/webgpu";
 import type { SceneRenderer } from "./renderers/types";
 import { initParallax } from "./parallax";
-import type { Corner, EdgeAxis, Point } from "./geometry";
-import { radiusFromPointer } from "./geometry";
+import type { Corner, CornerShape, EdgeAxis, Point } from "./geometry";
+import { SHAPES, radiusFromPointer } from "./geometry";
 import type { ActiveDrag, Edge } from "./render";
 import { createView } from "./render";
 import type { AppState } from "./state";
@@ -84,6 +84,8 @@ document.querySelectorAll<HTMLButtonElement>("#tabs [data-mode]").forEach((b) =>
   if (Number.isFinite(r) && q.has("r")) state.radius = Math.round(clampLinkedRadius(state, r));
   const m = q.get("mode") as Mode | null;
   if (m && (MODES as readonly string[]).includes(m) && renderers[m].supported) mode = m;
+  const sh = q.get("shape") as CornerShape | null;
+  if (sh && (SHAPES as readonly string[]).includes(sh)) state.shape = sh;
 }
 
 /** Written when a gesture ends, so mid-drag doesn't spam history. */
@@ -93,12 +95,19 @@ function persistURL(): void {
   q.set("p", String(state.padding));
   q.set("ref", state.ref);
   q.set("mode", mode);
+  q.set("shape", state.shape);
   history.replaceState(null, "", `?${q}`);
 }
 
 /* ------------------------------------------------------------------------ *
  *  The live CSS calculus for the DERIVED box
  * ------------------------------------------------------------------------ */
+
+function shapeNote(s: AppState): string {
+  if (s.shape === "squircle") return `\n.outer, .inner { corner-shape: squircle; }`;
+  if (s.shape === "catenary") return `\n/* catenary corner: no CSS equivalent — CSS tab shows round */`;
+  return "";
+}
 
 function cssCalculus(s: AppState): string {
   const p = s.padding;
@@ -109,7 +118,7 @@ function cssCalculus(s: AppState): string {
 .outer { --r: ${r}px; --p: ${p}px;
          border-radius: var(--r); padding: var(--p); }
 .inner { border-radius: max(0px, calc(var(--r) - var(--p))); }
-         /* max(0, ${r} − ${p}) = ${ri}px${r < p ? "  ← clamped sharp" : ""} */`;
+         /* max(0, ${r} − ${p}) = ${ri}px${r < p ? "  ← clamped sharp" : ""} */${shapeNote(s)}`;
   }
   const r = s.radius;
   const ro = outerRadius(s);
@@ -117,7 +126,7 @@ function cssCalculus(s: AppState): string {
 .inner { --r: ${r}px; border-radius: var(--r); }
 .outer { --p: ${p}px; padding: var(--p);
          border-radius: calc(var(--r) + var(--p)); }
-         /* ${r} + ${p} = ${ro}px */`;
+         /* ${r} + ${p} = ${ro}px */${shapeNote(s)}`;
 }
 
 /* ------------------------------------------------------------------------ *
@@ -195,7 +204,30 @@ function orthogonalDepth(edge: Edge, pt: Point): number {
   }
 }
 
+const shapeMenu = document.getElementById("shapeMenu") as HTMLElement;
+
+function openShapeMenu(at: Point): void {
+  shapeMenu.hidden = false;
+  shapeMenu.style.left = `${Math.max(8, Math.min(at.x, stageWrap.clientWidth - 110))}px`;
+  shapeMenu.style.top = `${Math.max(8, Math.min(at.y, stageWrap.clientHeight - 110))}px`;
+  shapeMenu.querySelectorAll<HTMLButtonElement>("[data-shape]").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.shape === state.shape));
+  });
+}
+
+shapeMenu.querySelectorAll<HTMLButtonElement>("[data-shape]").forEach((b) => {
+  b.addEventListener("click", () => {
+    state.shape = b.dataset.shape as CornerShape;
+    shapeMenu.hidden = true;
+    sync();
+    persistURL();
+  });
+});
+
+let longPress: ReturnType<typeof setTimeout> | undefined;
+
 stage.addEventListener("pointerdown", (e) => {
+  shapeMenu.hidden = true;
   const target = (e.target as Element).closest<SVGElement>("[data-role]");
   if (!target) return;
   const pt = toStage(e);
@@ -215,12 +247,23 @@ stage.addEventListener("pointerdown", (e) => {
   }
   stage.setPointerCapture(e.pointerId);
   e.preventDefault();
+  // Long-press on a corner (its handles) brings up the shape toggle.
+  if ((role === "radius" || role === "resize") && drag.corner) {
+    const at = { ...pt };
+    longPress = setTimeout(() => {
+      if (!drag) return;
+      drag = null;
+      openShapeMenu(at);
+      sync();
+    }, 550);
+  }
   sync();
 });
 
 stage.addEventListener("pointermove", (e) => {
   if (!drag) return;
   const pt = toStage(e);
+  if (Math.hypot(pt.x - drag.start.x, pt.y - drag.start.y) > 8) clearTimeout(longPress);
 
   if (drag.role === "radius" && drag.corner && drag.axis) {
     // Requested ρ is the pointer's distance from the corner along the edge
@@ -236,15 +279,15 @@ stage.addEventListener("pointermove", (e) => {
     hapticAtLimit(requested, state.padding);
     state.radius = clampLinkedRadius(state, state.radius);
   } else if (drag.role === "resize" && drag.corner) {
+    // Corner resize is symmetric about the box center, so the rectangle
+    // stays centered where it was.
     const r0 = drag.rect0;
-    let x1 = r0.x, y1 = r0.y, x2 = r0.x + r0.w, y2 = r0.y + r0.h;
-    if (drag.corner === "tl" || drag.corner === "bl") x1 = Math.min(pt.x, x2 - MIN_SIZE);
-    else x2 = Math.max(pt.x, x1 + MIN_SIZE);
-    if (drag.corner === "tl" || drag.corner === "tr") y1 = Math.min(pt.y, y2 - MIN_SIZE);
-    else y2 = Math.max(pt.y, y1 + MIN_SIZE);
+    const cx = r0.x + r0.w / 2, cy = r0.y + r0.h / 2;
+    const w = Math.max(MIN_SIZE, 2 * Math.abs(pt.x - cx));
+    const h = Math.max(MIN_SIZE, 2 * Math.abs(pt.y - cy));
     state.rect = {
-      x: Math.round(x1), y: Math.round(y1),
-      w: Math.round(x2 - x1), h: Math.round(y2 - y1),
+      x: Math.round(cx - w / 2), y: Math.round(cy - h / 2),
+      w: Math.round(w), h: Math.round(h),
     };
     state.padding = clampPadding(state, state.padding);
     state.radius = clampLinkedRadius(state, state.radius);
@@ -253,6 +296,7 @@ stage.addEventListener("pointermove", (e) => {
 });
 
 function endDrag(e: PointerEvent): void {
+  clearTimeout(longPress);
   if (!drag) return;
   drag = null;
   atLimit = false;

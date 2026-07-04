@@ -69,11 +69,22 @@ function hersheyText(
   x: number,
   y: number,
   size: number,
-  opts: { anchor?: "start" | "middle" | "end"; color?: string } = {},
+  opts: { anchor?: "start" | "middle" | "end"; color?: string; knockout?: boolean } = {},
 ): void {
   const s = size / CAP;
   const total = textAdvance(text) * s;
   const dx = opts.anchor === "middle" ? -total / 2 : opts.anchor === "end" ? -total : 0;
+  if (opts.knockout) {
+    // Mask the construction line behind the label: a background-colored
+    // box with an equal small gap on every side, so the text interrupts
+    // the line symmetrically.
+    const gap = 3;
+    el("rect", {
+      x: x + dx - gap, y: y - size - gap,
+      width: total + 2 * gap, height: size + 2 * gap,
+      fill: "#000",
+    }, parent);
+  }
   const g = el("g", { transform: `translate(${x + dx} ${y}) scale(${s})` }, parent);
   let cursor = 0;
   for (const ch of text) {
@@ -137,11 +148,10 @@ function dimension(parent: Element, p1: Point, p2: Point, offset: number, label:
   auxLine(parent, q1, q2);
   arrowhead(parent, q1, { x: -u.x, y: -u.y });
   arrowhead(parent, q2, u);
-  const lift = 6;
   hersheyText(parent, label,
-    (q1.x + q2.x) / 2 + n.x * Math.sign(offset) * lift,
-    (q1.y + q2.y) / 2 + n.y * Math.sign(offset) * lift + 4,
-    11, { anchor: "middle" });
+    (q1.x + q2.x) / 2,
+    (q1.y + q2.y) / 2 + 11 * 0.4,
+    11, { anchor: "middle", knockout: true });
 }
 
 /**
@@ -232,6 +242,21 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     cornerHandles[corner] = square;
   }
 
+  // Edge affordances: a small double-headed arrow at each outer edge
+  // midpoint, perpendicular to the edge — "this edge drags" (padding).
+  // Pure indication: hits still belong to the padding ring below.
+  const edgeHints: SVGGElement[] = [];
+  for (let i = 0; i < 4; i++) {
+    const g = el("g", { "pointer-events": "none" }, gHandles);
+    el("line", { x1: 0, y1: -8, x2: 0, y2: 8, stroke: DIM, "stroke-width": 1 }, g);
+    for (const dy of [-8, 8]) {
+      const sign = Math.sign(dy);
+      el("line", { x1: 0, y1: dy, x2: -3, y2: dy - sign * 4, stroke: DIM, "stroke-width": 1 }, g);
+      el("line", { x1: 0, y1: dy, x2: 3, y2: dy - sign * 4, stroke: DIM, "stroke-width": 1 }, g);
+    }
+    edgeHints.push(g);
+  }
+
   // Round radius handles: two per corner on the REFERENCE box. All corners
   // are linked, so every handle sets the same single ρ.
   const radiusHandles: SVGGElement[] = [];
@@ -248,29 +273,46 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
   }
 
   /**
-   * The calculation stack: ρ, then ±p, then the derived result — symbols
-   * left-aligned in one column, numbers right-aligned in a second, so the
-   * relation reads directly like the subtraction it is. This is the ONLY
-   * place the drag overlay letters numbers; dimensions stay unlabeled.
+   * The radii comparison: two vertical measurement lines side by side at
+   * the dragged corner. The first is the full outer radius; the second is
+   * split in two rows — the padding p, then the inner radius as its
+   * complement — so the subtraction is visible as geometry, not text.
+   * This is the ONLY place the overlay letters numbers.
    */
-  function calcStack(state: AppState, c: Point, corner: Corner): void {
-    const onLeft = corner === "tl" || corner === "bl";
+  function radiiCompare(state: AppState, corner: Corner): void {
+    const ρOut = outerRadius(state);
+    const ρIn = innerRadius(state);
+    if (ρOut < 2) return;
+    const pSeg = Math.min(state.padding, ρOut); // clamped corners cap the row
     const onTop = corner === "tl" || corner === "tr";
-    const COL = 58, LH = 16;
-    const x0 = onLeft ? c.x + 14 : c.x - 14 - COL;
-    const rows: Array<[sym: string, val: number, bright: boolean]> = [
-      ["ρ", state.radius, true],
-      [state.ref === "outer" ? "-p" : "+p", state.padding, false],
-      ["=", state.ref === "outer" ? innerRadius(state) : outerRadius(state), false],
-    ];
-    rows.forEach(([sym, val, bright], i) => {
-      const y = onTop
-        ? c.y + 22 + i * LH
-        : c.y - 22 - (rows.length - 1 - i) * LH;
-      const color = bright ? INK : LABEL;
-      hersheyText(gAux, sym, x0, y, 11, { color });
-      hersheyText(gAux, String(val), x0 + COL, y, 11, { anchor: "end", color });
-    });
+    const onLeft = corner === "tl" || corner === "bl";
+    const cx = onLeft ? state.rect.x + ρOut : state.rect.x + state.rect.w - ρOut;
+    const yEdge = onTop ? state.rect.y : state.rect.y + state.rect.h;
+    const dir = onTop ? 1 : -1;
+    const xA = cx - 16, xB = cx + 16;
+    const tick = (x: number, y: number) =>
+      auxLine(gAux, { x: x - 4, y }, { x: x + 4, y }, { "stroke-width": 0.75 });
+
+    // Line A — the whole outer radius.
+    auxLine(gAux, { x: xA, y: yEdge }, { x: xA, y: yEdge + dir * ρOut }, { "stroke-width": 0.75 });
+    tick(xA, yEdge);
+    tick(xA, yEdge + dir * ρOut);
+    // Line B — p, then ρ_in as its complement.
+    auxLine(gAux, { x: xB, y: yEdge }, { x: xB, y: yEdge + dir * (pSeg + ρIn) }, { "stroke-width": 0.75 });
+    tick(xB, yEdge);
+    tick(xB, yEdge + dir * pSeg);
+    if (ρIn > 0) tick(xB, yEdge + dir * (pSeg + ρIn));
+
+    // Each value lettered exactly once, centered ON its measurement line
+    // (the knockout masks the line behind the number with an even gap).
+    hersheyText(gAux, String(ρOut), xA, yEdge + dir * (ρOut / 2) + 4, 10,
+      { anchor: "middle", knockout: true, color: state.ref === "outer" ? INK : LABEL });
+    hersheyText(gAux, String(state.padding), xB, yEdge + dir * (pSeg / 2) + 4, 10,
+      { anchor: "middle", knockout: true });
+    if (ρIn > 0) {
+      hersheyText(gAux, String(ρIn), xB, yEdge + dir * (pSeg + ρIn / 2) + 4, 10,
+        { anchor: "middle", knockout: true, color: state.ref === "inner" ? INK : LABEL });
+    }
   }
 
   /** Construction overlay for an in-progress radius drag. */
@@ -301,7 +343,7 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       { x: midX, y: state.rect.y },
       { x: midX, y: state.rect.y + state.padding });
 
-    calcStack(state, c, corner);
+    radiiCompare(state, corner);
   }
 
   /** The padding dimension while dragging in the padding area. */
@@ -327,9 +369,9 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       p2 = { x: inX, y: ay };
     }
     narrowDimension(gAux, p1, p2);
-    // Anchor the calc stack at the corner that starts the grabbed edge.
+    // Anchor the comparison at the corner that starts the grabbed edge.
     const corner: Corner = edge === "top" ? "tl" : edge === "right" ? "tr" : edge === "bottom" ? "br" : "bl";
-    calcStack(state, arcCenter(state.rect, corner, ρOut), corner);
+    radiiCompare(state, corner);
   }
 
   /** Width/height dimensions while resizing. */
@@ -384,6 +426,19 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       cornerHandles[corner].setAttribute("x", String(px - SQUARE / 2));
       cornerHandles[corner].setAttribute("y", String(py - SQUARE / 2));
     }
+    // Edge hints sit mid-edge, rotated to point across it; they get out of
+    // the way while any construction overlay is up.
+    const { x, y, w, h } = state.rect;
+    const hintPos: Array<[number, number, number]> = [
+      [x + w / 2, y, 0], [x + w / 2, y + h, 0],
+      [x, y + h / 2, 90], [x + w, y + h / 2, 90],
+    ];
+    edgeHints.forEach((g, i) => {
+      const [hx, hy, rot] = hintPos[i];
+      g.setAttribute("transform", `translate(${hx} ${hy}) rotate(${rot})`);
+      g.setAttribute("opacity", active ? "0" : "1");
+    });
+
     const ref = refRect(state);
     for (const group of radiusHandles) {
       const corner = group.dataset.corner as Corner;

@@ -1,4 +1,4 @@
-import { roundedRectPath, uniformRadii } from "../geometry";
+import { boxPath } from "../geometry";
 import type { AppState } from "../state";
 import { innerRadius, innerRect, outerRadius } from "../state";
 import { BOX_DIM, BOX_INK, INNER_W, OUTER_W, type SceneRenderer } from "./types";
@@ -34,10 +34,10 @@ export function createCanvas2dRenderer(): SceneRenderer {
       ctx.clearRect(0, 0, w, h);
       ctx.lineWidth = OUTER_W;
       ctx.strokeStyle = s.ref === "outer" ? BOX_INK : BOX_DIM;
-      ctx.stroke(new Path2D(roundedRectPath(s.rect, uniformRadii(outerRadius(s)))));
+      ctx.stroke(new Path2D(boxPath(s.rect, outerRadius(s), s.shape)));
       ctx.lineWidth = INNER_W;
       ctx.strokeStyle = s.ref === "inner" ? BOX_INK : BOX_DIM;
-      ctx.stroke(new Path2D(roundedRectPath(innerRect(s), uniformRadii(innerRadius(s)))));
+      ctx.stroke(new Path2D(boxPath(innerRect(s), innerRadius(s), s.shape)));
     },
 
     unmount() {
