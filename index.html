@@ -10,9 +10,16 @@
 
 <header>
   <h1>Concentric Corners</h1>
+  <nav id="tabs" role="tablist" aria-label="Renderer">
+    <button type="button" role="tab" data-mode="css" aria-selected="true">CSS</button>
+    <button type="button" role="tab" data-mode="canvas" aria-selected="false">CANVAS 2D</button>
+    <button type="button" role="tab" data-mode="svg" aria-selected="false">SVG</button>
+    <button type="button" role="tab" data-mode="webgpu" aria-selected="false">WEBGPU</button>
+  </nav>
 </header>
 
 <div id="stage-wrap">
+  <div id="scene-host" aria-hidden="true"></div>
   <svg id="stage"></svg>
   <button id="refToggle" type="button">REF: OUTER ⇄</button>
   <p class="caption">ROUND HANDLES = RADIUS (ALL CORNERS LINKED) · EDGES &amp; PADDING AREA = PADDING · SQUARES = RESIZE · DBL-CLICK = SHARP</p>

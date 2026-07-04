@@ -27,6 +27,17 @@ h1 {
   color: var(--ink);
   text-transform: uppercase; letter-spacing: 0.28em;
 }
+#tabs { margin-left: auto; display: flex; }
+#tabs button {
+  font: 10px var(--mono); letter-spacing: 0.12em;
+  color: var(--dim); background: #000;
+  border: 1px solid var(--hairline); border-left-width: 0;
+  padding: 6px 10px; cursor: pointer; border-radius: 0;
+  touch-action: manipulation;
+}
+#tabs button:first-child { border-left-width: 1px; }
+#tabs button[aria-selected="true"] { color: #000; background: var(--ink); border-color: var(--ink); }
+#tabs button:disabled { color: var(--faint); cursor: not-allowed; text-decoration: line-through; }
 
 /* -------------------------------- stage -------------------------------- */
 #stage-wrap {
@@ -38,6 +49,24 @@ h1 {
   overflow: hidden;
 }
 svg#stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* The scene (boxes) layer, below the chrome. Parallax is pure CSS: JS only
+   feeds --tilt-x/--tilt-y in [-1, 1] when a gyroscope actually reports. The
+   scene and the chrome shift by different amounts — that difference is the
+   depth. */
+#scene-host {
+  position: absolute; inset: 0; pointer-events: none;
+  transform: translate(calc(var(--tilt-x, 0) * 5px), calc(var(--tilt-y, 0) * 5px));
+}
+svg#stage {
+  transform: translate(calc(var(--tilt-x, 0) * 9px), calc(var(--tilt-y, 0) * 9px));
+}
+#scene-host > * { position: absolute; }
+.scene-svg, .scene-canvas { inset: 0; width: 100%; height: 100%; }
+
+/* The CSS renderer's boxes — the derived radius is computed BY CSS. */
+.css-box-outer { border-style: solid; box-sizing: border-box; }
+.css-box-inner { border-style: solid; box-sizing: border-box; width: 100%; height: 100%; }
 /* Drag targets fade out after a few idle seconds (see main.ts) and any
    touch or pointer movement brings them back. */
 #stage-wrap .handles, #refToggle, #stage-wrap .caption {

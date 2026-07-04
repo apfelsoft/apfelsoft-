@@ -1,4 +1,10 @@
 import "./style.css";
+import { createCanvas2dRenderer } from "./renderers/canvas2d";
+import { createCssRenderer } from "./renderers/css";
+import { createSvgRenderer } from "./renderers/svg";
+import { createWebGpuRenderer } from "./renderers/webgpu";
+import type { SceneRenderer } from "./renderers/types";
+import { initParallax } from "./parallax";
 import type { Corner, EdgeAxis, Point } from "./geometry";
 import { radiusFromPointer } from "./geometry";
 import type { ActiveDrag, Edge } from "./render";
@@ -19,8 +25,50 @@ const stageWrap = document.getElementById("stage-wrap") as HTMLElement;
 const toggleBtn = document.getElementById("refToggle") as HTMLButtonElement;
 const cssCode = document.getElementById("cssCode") as HTMLElement;
 
-const render = createView(stage);
+const sceneHost = document.getElementById("scene-host") as HTMLElement;
+
+const drawChrome = createView(stage);
 const state = initialState(stageWrap.clientWidth, stageWrap.clientHeight);
+
+/* ------------------------------------------------------------------------ *
+ *  Renderer tabs: CSS / Canvas 2D / SVG / WebGPU — same scene, same state
+ * ------------------------------------------------------------------------ */
+
+const MODES = ["css", "canvas", "svg", "webgpu"] as const;
+type Mode = (typeof MODES)[number];
+const renderers: Record<Mode, SceneRenderer> = {
+  css: createCssRenderer(),
+  canvas: createCanvas2dRenderer(),
+  svg: createSvgRenderer(),
+  webgpu: createWebGpuRenderer(),
+};
+let mode: Mode = "css";
+
+async function setMode(next: Mode): Promise<void> {
+  if (!renderers[next].supported) return;
+  renderers[mode].unmount();
+  mode = next;
+  document.querySelectorAll<HTMLButtonElement>("#tabs [data-mode]").forEach((b) => {
+    b.setAttribute("aria-selected", String(b.dataset.mode === mode));
+  });
+  try {
+    await renderers[mode].mount(sceneHost);
+  } catch {
+    // e.g. WebGPU adapter refused at runtime — fall back to CSS.
+    if (mode !== "css") { void setMode("css"); return; }
+  }
+  sync();
+}
+
+document.querySelectorAll<HTMLButtonElement>("#tabs [data-mode]").forEach((b) => {
+  const m = b.dataset.mode as Mode;
+  if (!renderers[m].supported) {
+    b.disabled = true;
+    b.title = "Not supported by this browser";
+    return;
+  }
+  b.addEventListener("click", () => { void setMode(m).then(persistURL); });
+});
 
 /* ------------------------------------------------------------------------ *
  *  Shareable URL state: ?r=48&p=24&ref=outer
@@ -34,6 +82,8 @@ const state = initialState(stageWrap.clientWidth, stageWrap.clientHeight);
   if (Number.isFinite(p) && q.has("p")) state.padding = Math.round(clampPadding(state, p));
   const r = Number(q.get("r"));
   if (Number.isFinite(r) && q.has("r")) state.radius = Math.round(clampLinkedRadius(state, r));
+  const m = q.get("mode") as Mode | null;
+  if (m && (MODES as readonly string[]).includes(m) && renderers[m].supported) mode = m;
 }
 
 /** Written when a gesture ends, so mid-drag doesn't spam history. */
@@ -42,6 +92,7 @@ function persistURL(): void {
   q.set("r", String(state.radius));
   q.set("p", String(state.padding));
   q.set("ref", state.ref);
+  q.set("mode", mode);
   history.replaceState(null, "", `?${q}`);
 }
 
@@ -74,7 +125,8 @@ function cssCalculus(s: AppState): string {
  * ------------------------------------------------------------------------ */
 
 function sync(): void {
-  render(state, activeOf(drag));
+  drawChrome(state, activeOf(drag));
+  renderers[mode].draw(state);
   const cx = state.rect.x + state.rect.w / 2;
   const cy = state.rect.y + state.rect.h / 2;
   toggleBtn.style.left = `${cx}px`;
@@ -277,4 +329,7 @@ wake();
 
 window.addEventListener("resize", sync);
 
-sync();
+// Subtle gyro parallax where orientation data exists (iOS asks on first tap).
+initParallax(stageWrap);
+
+void setMode(mode);

@@ -186,12 +186,14 @@ function dottedCircle(parent: Element, c: Point, r: number, bright: boolean): vo
   }, parent);
 }
 
-/* ------------------------------- the view -------------------------------- */
+/* ------------------------------ the chrome ------------------------------- */
 
 /**
- * Builds the persistent SVG scene graph once (interactive elements must not
- * be recreated mid-drag or pointer capture would break) and returns a render
- * function that redraws it from state plus the current drag, if any.
+ * The interaction + annotation layer shared by every scene renderer: hit
+ * areas, handles, guides, construction overlay and lettering. The two boxes
+ * themselves are drawn by the active renderer tab (CSS / Canvas / SVG /
+ * WebGPU) underneath this SVG. Interactive elements are created once —
+ * recreating them mid-drag would break pointer capture.
  */
 export function createView(stage: SVGSVGElement): (state: AppState, active: ActiveDrag | null) => void {
   // Touch screens get bigger targets.
@@ -200,14 +202,10 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
   const DOT_R = coarse ? 6 : 4.5;
   const SQUARE = coarse ? 13 : 9;
 
-  const gBoxes = el("g", { "pointer-events": "none" }, stage);
   const gGuides = el("g", { "pointer-events": "none" }, stage);
   const gAux = el("g", { "pointer-events": "none" }, stage);
   const gHit = el("g", {}, stage);
   const gHandles = el("g", { class: "handles" }, stage);
-
-  const outerPath = el("path", { fill: "none", stroke: INK, "stroke-width": 1.6 }, gBoxes);
-  const innerPath = el("path", { fill: "none", stroke: DIM, "stroke-width": 1.2 }, gBoxes);
 
   // The padding area — the ring between (slightly outside) the outer box
   // and the inner box. Dragging anywhere in it, or on an edge, sets the
@@ -345,12 +343,6 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     const ρOut = outerRadius(state);
     const ρIn = innerRadius(state);
     const inner = innerRect(state);
-
-    outerPath.setAttribute("d", roundedRectPath(state.rect, uniformRadii(ρOut)));
-    innerPath.setAttribute("d", roundedRectPath(inner, uniformRadii(ρIn)));
-    // The reference box draws bright, the derived one dim.
-    outerPath.setAttribute("stroke", state.ref === "outer" ? INK : DIM);
-    innerPath.setAttribute("stroke", state.ref === "inner" ? INK : DIM);
 
     // Padding hit ring: from 10px outside the outer edge down to the inner
     // box (evenodd punches the inner region out).
