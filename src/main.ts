@@ -23,6 +23,29 @@ const render = createView(stage);
 const state = initialState(stageWrap.clientWidth, stageWrap.clientHeight);
 
 /* ------------------------------------------------------------------------ *
+ *  Shareable URL state: ?r=48&p=24&ref=outer
+ * ------------------------------------------------------------------------ */
+
+{
+  const q = new URLSearchParams(location.search);
+  const ref = q.get("ref");
+  if (ref === "inner" || ref === "outer") state.ref = ref;
+  const p = Number(q.get("p"));
+  if (Number.isFinite(p) && q.has("p")) state.padding = Math.round(clampPadding(state, p));
+  const r = Number(q.get("r"));
+  if (Number.isFinite(r) && q.has("r")) state.radius = Math.round(clampLinkedRadius(state, r));
+}
+
+/** Written when a gesture ends, so mid-drag doesn't spam history. */
+function persistURL(): void {
+  const q = new URLSearchParams();
+  q.set("r", String(state.radius));
+  q.set("p", String(state.padding));
+  q.set("ref", state.ref);
+  history.replaceState(null, "", `?${q}`);
+}
+
+/* ------------------------------------------------------------------------ *
  *  The live CSS calculus for the DERIVED box
  * ------------------------------------------------------------------------ */
 
@@ -98,6 +121,17 @@ function nearestEdge(pt: Point): Edge {
   return d[0][0];
 }
 
+/**
+ * A short haptic tick the moment a drag hits its clamp limit (ρ at 0 or
+ * max, padding at min or max) — once per boundary entry, touch only.
+ */
+let atLimit = false;
+function hapticAtLimit(requested: number, clamped: number): void {
+  const hit = Math.abs(requested - clamped) > 1;
+  if (hit && !atLimit) navigator.vibrate?.(8);
+  atLimit = hit;
+}
+
 /** The pointer's distance INTO the box, orthogonal to the given edge. */
 function orthogonalDepth(edge: Edge, pt: Point): number {
   const { x, y, w, h } = state.rect;
@@ -141,10 +175,13 @@ stage.addEventListener("pointermove", (e) => {
     // of the REFERENCE box; all corners share the result.
     const requested = radiusFromPointer(refRect(state), drag.corner, drag.axis, pt);
     state.radius = Math.round(clampLinkedRadius(state, requested));
+    hapticAtLimit(requested, state.radius);
   } else if (drag.role === "padding" && drag.edge) {
     // Padding follows the pointer's depth orthogonal to the grabbed edge.
     drag.at = drag.edge === "top" || drag.edge === "bottom" ? pt.x : pt.y;
-    state.padding = Math.round(clampPadding(state, orthogonalDepth(drag.edge, pt)));
+    const requested = orthogonalDepth(drag.edge, pt);
+    state.padding = Math.round(clampPadding(state, requested));
+    hapticAtLimit(requested, state.padding);
     state.radius = clampLinkedRadius(state, state.radius);
   } else if (drag.role === "resize" && drag.corner) {
     const r0 = drag.rect0;
@@ -166,8 +203,10 @@ stage.addEventListener("pointermove", (e) => {
 function endDrag(e: PointerEvent): void {
   if (!drag) return;
   drag = null;
+  atLimit = false;
   if (stage.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId);
   sync(); // drop the construction overlay
+  persistURL();
 }
 stage.addEventListener("pointerup", endDrag);
 stage.addEventListener("pointercancel", endDrag);
@@ -177,6 +216,7 @@ stage.addEventListener("dblclick", (e) => {
   if (!(e.target as Element).closest('[data-role="radius"]')) return;
   state.radius = 0;
   sync();
+  persistURL();
 });
 
 /* ------------------------------------------------------------------------ *
@@ -195,6 +235,25 @@ toggleBtn.addEventListener("click", () => {
   }
   state.radius = clampLinkedRadius(state, state.radius);
   sync();
+  persistURL();
+});
+
+/* ------------------------------------------------------------------------ *
+ *  Copy buttons on every CSS block
+ * ------------------------------------------------------------------------ */
+
+document.querySelectorAll<HTMLButtonElement>(".copy-btn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const pre = btn.parentElement?.querySelector("pre");
+    if (!pre) return;
+    try {
+      await navigator.clipboard.writeText(pre.textContent ?? "");
+      btn.textContent = "COPIED";
+    } catch {
+      btn.textContent = "FAILED";
+    }
+    setTimeout(() => { btn.textContent = "COPY"; }, 1200);
+  });
 });
 
 /* ------------------------------------------------------------------------ *

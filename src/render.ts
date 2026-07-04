@@ -150,7 +150,7 @@ function dimension(parent: Element, p1: Point, p2: Point, offset: number, label:
  * arrows sit outside, tips touching p1 and p2, pointing INWARD at each
  * other. Used for the padding between the boxes.
  */
-function narrowDimension(parent: Element, p1: Point, p2: Point, label: string): void {
+function narrowDimension(parent: Element, p1: Point, p2: Point): void {
   const dx = p2.x - p1.x, dy = p2.y - p1.y;
   const len = Math.hypot(dx, dy);
   if (len < 1) return;
@@ -161,13 +161,7 @@ function narrowDimension(parent: Element, p1: Point, p2: Point, label: string): 
     { x: p2.x + u.x * ext, y: p2.y + u.y * ext });
   arrowhead(parent, p1, u);                      // outside, pointing in
   arrowhead(parent, p2, { x: -u.x, y: -u.y });   // outside, pointing in
-  // Letter the value beside the span, on the −n side so it never crosses
-  // the dimension line.
-  const n = { x: -u.y, y: u.x };
-  hersheyText(parent, label,
-    (p1.x + p2.x) / 2 - n.x * 12,
-    (p1.y + p2.y) / 2 - n.y * 12 + 4,
-    10, {});
+  // No value lettered here — the calc stack is the single source of numbers.
 }
 
 /** CAD center mark: a small cross plus dash-dot center lines through c. */
@@ -200,6 +194,12 @@ function dottedCircle(parent: Element, c: Point, r: number, bright: boolean): vo
  * function that redraws it from state plus the current drag, if any.
  */
 export function createView(stage: SVGSVGElement): (state: AppState, active: ActiveDrag | null) => void {
+  // Touch screens get bigger targets.
+  const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+  const HIT_R = coarse ? 26 : 16;
+  const DOT_R = coarse ? 6 : 4.5;
+  const SQUARE = coarse ? 13 : 9;
+
   const gBoxes = el("g", { "pointer-events": "none" }, stage);
   const gGuides = el("g", { "pointer-events": "none" }, stage);
   const gAux = el("g", { "pointer-events": "none" }, stage);
@@ -226,7 +226,7 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
   for (const corner of CORNERS) {
     const cursor = corner === "tl" || corner === "br" ? "nwse-resize" : "nesw-resize";
     const square = el("rect", {
-      width: 9, height: 9,
+      width: SQUARE, height: SQUARE,
       fill: "#000", stroke: DIM, "stroke-width": 1.2, cursor,
     }, gHandles);
     square.dataset.role = "resize";
@@ -243,10 +243,36 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       group.dataset.role = "radius";
       group.dataset.corner = corner;
       group.dataset.axis = axis;
-      el("circle", { r: 16, fill: "transparent" }, group); // generous hit area
-      el("circle", { r: 4.5, fill: "#000", stroke: INK, "stroke-width": 1.4 }, group);
+      el("circle", { r: HIT_R, fill: "transparent" }, group); // generous hit area
+      el("circle", { r: DOT_R, fill: "#000", stroke: INK, "stroke-width": 1.4 }, group);
       radiusHandles.push(group);
     }
+  }
+
+  /**
+   * The calculation stack: ρ, then ±p, then the derived result — symbols
+   * left-aligned in one column, numbers right-aligned in a second, so the
+   * relation reads directly like the subtraction it is. This is the ONLY
+   * place the drag overlay letters numbers; dimensions stay unlabeled.
+   */
+  function calcStack(state: AppState, c: Point, corner: Corner): void {
+    const onLeft = corner === "tl" || corner === "bl";
+    const onTop = corner === "tl" || corner === "tr";
+    const COL = 58, LH = 16;
+    const x0 = onLeft ? c.x + 14 : c.x - 14 - COL;
+    const rows: Array<[sym: string, val: number, bright: boolean]> = [
+      ["ρ", state.radius, true],
+      [state.ref === "outer" ? "-p" : "+p", state.padding, false],
+      ["=", state.ref === "outer" ? innerRadius(state) : outerRadius(state), false],
+    ];
+    rows.forEach(([sym, val, bright], i) => {
+      const y = onTop
+        ? c.y + 22 + i * LH
+        : c.y - 22 - (rows.length - 1 - i) * LH;
+      const color = bright ? INK : LABEL;
+      hersheyText(gAux, sym, x0, y, 11, { color });
+      hersheyText(gAux, String(val), x0 + COL, y, 11, { anchor: "end", color });
+    });
   }
 
   /** Construction overlay for an in-progress radius drag. */
@@ -258,18 +284,8 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     const c = arcCenter(state.rect, corner, ρOut);
 
     centerMark(gAux, c, ρOut + 26);
-
-    const diag = Math.SQRT1_2;
-    const circles: Array<[r: number, isRef: boolean]> = state.ref === "outer"
-      ? [[ρOut, true], [ρIn, false]]
-      : [[ρIn, true], [ρOut, false]];
-    for (const [r, isRef] of circles) {
-      if (r < 1) continue;
-      dottedCircle(gAux, c, r, isRef);
-      hersheyText(gAux, `R${Math.round(r)}`,
-        c.x + r * diag + 5, c.y - r * diag - 4, 10,
-        { color: isRef ? INK : LABEL });
-    }
+    if (ρOut >= 1) dottedCircle(gAux, c, ρOut, state.ref === "outer");
+    if (ρIn >= 1) dottedCircle(gAux, c, ρIn, state.ref === "inner");
 
     // Radius leader: center → the handle being dragged, arrow at the rim.
     const ref = refRect(state);
@@ -280,30 +296,14 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       arrowhead(gAux, handle, u);
     }
 
-    // Distance from the reference box's corner to the arc start (= ρ),
-    // dimensioned outside the box along the dragged edge.
-    const onLeft = corner === "tl" || corner === "bl";
-    const onTop = corner === "tl" || corner === "tr";
-    const cornerPt = {
-      x: onLeft ? ref.x : ref.x + ref.w,
-      y: onTop ? ref.y : ref.y + ref.h,
-    };
-    let offset: number;
-    if (axis === "h") {
-      const leftToRight = handle.x >= cornerPt.x;
-      offset = (leftToRight === onTop) ? -22 : 22;
-    } else {
-      const topToBottom = handle.y >= cornerPt.y;
-      offset = (topToBottom === onLeft) ? 22 : -22;
-    }
-    dimension(gAux, cornerPt, handle, offset, String(Math.round(ρRef)));
-
-    // The padding, narrow style with inward-pointing arrows.
+    // The padding, narrow style with inward-pointing arrows, on the edge
+    // being dragged (no number — the stack carries it).
     const midX = state.rect.x + state.rect.w / 2;
     narrowDimension(gAux,
       { x: midX, y: state.rect.y },
-      { x: midX, y: state.rect.y + state.padding },
-      `p=${state.padding}`);
+      { x: midX, y: state.rect.y + state.padding });
+
+    calcStack(state, c, corner);
   }
 
   /** The padding dimension while dragging in the padding area. */
@@ -328,7 +328,10 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
       p1 = { x: edgeX, y: ay };
       p2 = { x: inX, y: ay };
     }
-    narrowDimension(gAux, p1, p2, `p=${p}`);
+    narrowDimension(gAux, p1, p2);
+    // Anchor the calc stack at the corner that starts the grabbed edge.
+    const corner: Corner = edge === "top" ? "tl" : edge === "right" ? "tr" : edge === "bottom" ? "br" : "bl";
+    calcStack(state, arcCenter(state.rect, corner, ρOut), corner);
   }
 
   /** Width/height dimensions while resizing. */
@@ -386,8 +389,8 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     for (const corner of CORNERS) {
       const px = corner === "tl" || corner === "bl" ? state.rect.x : state.rect.x + state.rect.w;
       const py = corner === "tl" || corner === "tr" ? state.rect.y : state.rect.y + state.rect.h;
-      cornerHandles[corner].setAttribute("x", String(px - 4.5));
-      cornerHandles[corner].setAttribute("y", String(py - 4.5));
+      cornerHandles[corner].setAttribute("x", String(px - SQUARE / 2));
+      cornerHandles[corner].setAttribute("y", String(py - SQUARE / 2));
     }
     const ref = refRect(state);
     for (const group of radiusHandles) {

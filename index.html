@@ -19,6 +19,7 @@
 </div>
 
 <section id="css-out" aria-label="Live CSS for the derived box">
+  <button class="copy-btn" type="button">COPY</button>
   <pre id="cssCode"></pre>
 </section>
 
@@ -60,14 +61,20 @@
   </svg>
 
   <p>Outer as reference — the inner radius is derived, clamped at sharp:</p>
-  <pre>.outer { --r: 48px; --p: 24px;
+  <div class="codebox">
+    <button class="copy-btn" type="button">COPY</button>
+    <pre>.outer { --r: 48px; --p: 24px;
          border-radius: var(--r); padding: var(--p); }
 .inner { border-radius: max(0px, calc(var(--r) - var(--p))); }</pre>
+  </div>
 
   <p>Inner as reference — the outer radius is derived; no clamp needed, adding p only grows it:</p>
-  <pre>.inner { --r: 12px; border-radius: var(--r); }
+  <div class="codebox">
+    <button class="copy-btn" type="button">COPY</button>
+    <pre>.inner { --r: 12px; border-radius: var(--r); }
 .outer { --p: 24px; padding: var(--p);
          border-radius: calc(var(--r) + var(--p)); }</pre>
+  </div>
 
   <p>
     The clamp is where roundness dies, and it is lossy: once p ≥ ρ the inner

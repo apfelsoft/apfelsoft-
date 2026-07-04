@@ -63,6 +63,7 @@ svg#stage { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
 
 /* --------------------------- live CSS readout --------------------------- */
 #css-out {
+  position: relative;
   padding: 14px 16px;
   border-bottom: 1px solid var(--hairline);
 }
@@ -70,6 +71,19 @@ svg#stage { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   font: 12px/1.7 var(--mono); color: var(--ink);
   overflow-x: auto;
 }
+
+/* ----------------------------- copy buttons ----------------------------- */
+.copy-btn {
+  position: absolute; top: 8px; right: 10px;
+  font: 9.5px var(--mono); letter-spacing: 0.14em;
+  color: var(--dim); background: #000;
+  border: 1px solid var(--hairline); border-radius: 0;
+  padding: 4px 8px; cursor: pointer;
+  touch-action: manipulation;
+}
+.copy-btn:hover { color: var(--ink); border-color: var(--dim); }
+.codebox { position: relative; margin: 12px 0; }
+.codebox pre { margin: 0; }
 
 /* ------------------------------ explainer ------------------------------- */
 .explainer {
