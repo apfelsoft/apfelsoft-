@@ -189,6 +189,35 @@ function toStage(e: PointerEvent): Point {
   return { x: e.clientX - b.left, y: e.clientY - b.top };
 }
 
+const remPx = (): number =>
+  parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+
+/**
+ * Keep the box inside the stage. If it ends up crossing the 1rem margin
+ * (window resize, rotation), scale it down at its aspect ratio and re-seat
+ * it within a roomier 2rem margin — the overcorrection keeps it from
+ * riding the trigger boundary.
+ */
+function fitBoxToStage(): void {
+  const rem = remPx();
+  const W = stageWrap.clientWidth, H = stageWrap.clientHeight;
+  const soft = rem, hard = 2 * rem;
+  const r = state.rect;
+  const violates = r.x < soft || r.y < soft ||
+    r.x + r.w > W - soft || r.y + r.h > H - soft;
+  if (!violates) return;
+  const scale = Math.min(1, (W - 2 * hard) / r.w, (H - 2 * hard) / r.h);
+  const w = Math.max(MIN_SIZE, Math.round(r.w * scale));
+  const h = Math.max(MIN_SIZE, Math.round(r.h * scale));
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+  let x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
+  x = Math.min(Math.max(x, hard), Math.max(hard, W - hard - w));
+  y = Math.min(Math.max(y, hard), Math.max(hard, H - hard - h));
+  state.rect = { x, y, w, h };
+  state.padding = Math.round(clampPadding(state, state.padding));
+  state.radius = clampLinkedRadius(state, state.radius);
+}
+
 /** Which outer edge the pointer is nearest to — a padding drag sticks to it. */
 function nearestEdge(pt: Point): Edge {
   const { x, y, w, h } = state.rect;
@@ -303,8 +332,12 @@ stage.addEventListener("pointermove", (e) => {
     // stays centered where it was.
     const r0 = drag.rect0;
     const cx = r0.x + r0.w / 2, cy = r0.y + r0.h / 2;
-    const w = Math.max(MIN_SIZE, 2 * Math.abs(pt.x - cx));
-    const h = Math.max(MIN_SIZE, 2 * Math.abs(pt.y - cy));
+    // The centered resize may never push an edge past the 1rem stage margin.
+    const soft = remPx();
+    const maxW = 2 * Math.min(cx - soft, stageWrap.clientWidth - soft - cx);
+    const maxH = 2 * Math.min(cy - soft, stageWrap.clientHeight - soft - cy);
+    const w = Math.min(Math.max(MIN_SIZE, 2 * Math.abs(pt.x - cx)), Math.max(MIN_SIZE, maxW));
+    const h = Math.min(Math.max(MIN_SIZE, 2 * Math.abs(pt.y - cy)), Math.max(MIN_SIZE, maxH));
     state.rect = {
       x: Math.round(cx - w / 2), y: Math.round(cy - h / 2),
       w: Math.round(w), h: Math.round(h),
@@ -391,7 +424,12 @@ stageWrap.addEventListener("pointerdown", wake);
 stageWrap.addEventListener("pointermove", wake);
 wake();
 
-window.addEventListener("resize", sync);
+window.addEventListener("resize", () => {
+  fitBoxToStage();
+  sync();
+});
+
+fitBoxToStage();
 
 // Subtle gyro parallax where orientation data exists (iOS asks on first tap).
 initParallax(stageWrap);
