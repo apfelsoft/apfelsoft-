@@ -198,10 +198,6 @@ function cssCalculus(s: AppState): string {
 function sync(): void {
   drawChrome(state, activeOf(drag));
   renderers[mode].draw(state);
-  const cx = state.rect.x + state.rect.w / 2;
-  const cy = state.rect.y + state.rect.h / 2;
-  toggleBtn.style.left = `${cx}px`;
-  toggleBtn.style.top = `${cy}px`;
   toggleBtn.textContent = `REF: ${state.ref.toUpperCase()} ⇄`;
   cssCode.textContent = cssCalculus(state);
 }

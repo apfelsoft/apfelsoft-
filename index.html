@@ -19,6 +19,7 @@
     </nav>
   </div>
   <div class="hrow">
+    <button id="refToggle" type="button">REF: OUTER ⇄</button>
     <nav id="shapes" role="tablist" aria-label="Corner shape">
       <button type="button" role="tab" data-shape="round" aria-selected="true">ROUND</button>
       <button type="button" role="tab" data-shape="squircle" aria-selected="false">SQUIRCLE</button>
@@ -39,84 +40,12 @@
 <div id="stage-wrap">
   <div id="scene-host" aria-hidden="true"></div>
   <svg id="stage"></svg>
-  <button id="refToggle" type="button">REF: OUTER ⇄</button>
   <p class="caption">ROUND HANDLES = RADIUS (LINKED) · EDGES = PADDING · SQUARES = RESIZE (CENTERED) · DBL-CLICK = SHARP</p>
 </div>
 
 <section id="css-out" aria-label="Live CSS for the derived box">
   <button class="copy-btn" type="button">COPY</button>
   <pre id="cssCode"></pre>
-</section>
-
-<section class="explainer">
-  <h2>No trig. No roots. Just −p</h2>
-  <p>
-    Every corner arc is drawn around a center that sits ρ inward from
-    <em>both</em> edges. Pad the box by p and the edges move in by p — so
-    keeping the <em>same</em> center simply costs p of radius. With all four
-    corners linked, the entire relationship is one subtraction.
-  </p>
-
-  <svg class="diagram" viewBox="0 0 340 230" role="img"
-       aria-label="Corner detail: outer and inner arc share one center; the two radii differ by exactly the padding p">
-    <!-- outer corner -->
-    <path d="M330,30 H110 A80,80 0 0 0 30,110 V220" fill="none" stroke="#f2f2f2" stroke-width="1.6"/>
-    <!-- inner corner, inset by p, radius r − p, SAME center -->
-    <path d="M330,65 H110 A45,45 0 0 0 65,110 V220" fill="none" stroke="#8f8f8f" stroke-width="1.2"/>
-    <!-- shared center -->
-    <line x1="105" y1="110" x2="115" y2="110" stroke="#f2f2f2"/>
-    <line x1="110" y1="105" x2="110" y2="115" stroke="#f2f2f2"/>
-    <!-- outer radius, straight up to the arc -->
-    <line x1="110" y1="110" x2="110" y2="30" stroke="#f2f2f2" stroke-dasharray="4 4"/>
-    <text x="117" y="56" font-family="ui-monospace,monospace" font-size="11" fill="#f2f2f2">--r</text>
-    <!-- inner radius, straight left to the arc -->
-    <line x1="110" y1="110" x2="65" y2="110" stroke="#8f8f8f" stroke-dasharray="4 4"/>
-    <text x="60" y="128" font-family="ui-monospace,monospace" font-size="11" fill="#8f8f8f">r − p</text>
-    <!-- padding, narrow dimension: arrows outside, pointing inward -->
-    <line x1="250" y1="16" x2="250" y2="79" stroke="#8f8f8f"/>
-    <line x1="250" y1="30" x2="247" y2="22" stroke="#8f8f8f"/>
-    <line x1="250" y1="30" x2="253" y2="22" stroke="#8f8f8f"/>
-    <line x1="250" y1="65" x2="247" y2="73" stroke="#8f8f8f"/>
-    <line x1="250" y1="65" x2="253" y2="73" stroke="#8f8f8f"/>
-    <text x="258" y="52" font-family="ui-monospace,monospace" font-size="11" fill="#8f8f8f">--p</text>
-    <!-- moral of the story -->
-    <text x="200" y="200" font-family="system-ui,sans-serif" font-size="12" fill="#b5b5b5" text-anchor="middle">
-      one center · two radii · they differ by exactly p
-    </text>
-  </svg>
-
-  <p>Outer as reference — the inner radius is derived, clamped at sharp:</p>
-  <div class="codebox">
-    <button class="copy-btn" type="button">COPY</button>
-    <pre>.outer { --r: 48px; --p: 24px;
-         border-radius: var(--r); padding: var(--p); }
-.inner { border-radius: max(0px, calc(var(--r) - var(--p))); }</pre>
-  </div>
-
-  <p>Inner as reference — the outer radius is derived; no clamp needed, adding p only grows it:</p>
-  <div class="codebox">
-    <button class="copy-btn" type="button">COPY</button>
-    <pre>.inner { --r: 12px; border-radius: var(--r); }
-.outer { --p: 24px; padding: var(--p);
-         border-radius: calc(var(--r) + var(--p)); }</pre>
-  </div>
-
-  <p>
-    One more subtlety the shapes expose: the −p rule and the TRUE parallel
-    offset (constant orthogonal padding) coincide <em>only for round
-    corners</em>. A squircle reduced by p bulges ~19% wide of the true
-    offset at the diagonal, a catenary ~4% — the dotted curve while
-    dragging shows the true offset. CSS approximates the shapes with
-    corner-shape: squircle is superellipse(2) exactly; catenary ≈
-    superellipse(1.17).
-  </p>
-  <p>
-    The clamp is where roundness dies, and it is lossy: once p ≥ ρ the inner
-    corner is square, and from a square inner corner the outer radius can only
-    be bounded (ρ ≤ p), never recovered. The only square root anywhere is
-    decorative — the shared center lies ρ·√2 from the corner along the 45°
-    diagonal, a consequence of sitting at (ρ, ρ), never an input.
-  </p>
 </section>
 
 <footer>
