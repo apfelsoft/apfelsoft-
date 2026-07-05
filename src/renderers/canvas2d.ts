@@ -34,10 +34,10 @@ export function createCanvas2dRenderer(): SceneRenderer {
       ctx.clearRect(0, 0, w, h);
       ctx.lineWidth = OUTER_W;
       ctx.strokeStyle = s.ref === "outer" ? BOX_INK : BOX_DIM;
-      ctx.stroke(new Path2D(boxPath(s.rect, outerRadius(s), s.shape)));
+      ctx.stroke(new Path2D(boxPath(s.rect, outerRadius(s), s.shape, s.k)));
       ctx.lineWidth = INNER_W;
       ctx.strokeStyle = s.ref === "inner" ? BOX_INK : BOX_DIM;
-      ctx.stroke(new Path2D(boxPath(innerRect(s), innerRadius(s), s.shape)));
+      ctx.stroke(new Path2D(boxPath(innerRect(s), innerRadius(s), s.shape, s.k)));
     },
 
     unmount() {

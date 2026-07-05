@@ -155,11 +155,11 @@ function polylineQuads(pts: Vec2[], reverse: boolean, out: CurveData[]): void {
  * inward (counter-clockwise). Offsetting a shape by growing rect and ρ
  * together is exact for round corners and sub-pixel for the others.
  */
-export function strokeRing(rect: Rect, ρ: number, shape: CornerShape, width: number): CurveData[] {
+export function strokeRing(rect: Rect, ρ: number, shape: CornerShape, width: number, k = 2): CurveData[] {
   const h = width / 2;
   const out: CurveData[] = [];
-  polylineQuads(outlineSamples(grow(rect, h), ρ + h, shape), false, out);
-  polylineQuads(outlineSamples(grow(rect, -h), Math.max(0, ρ - h), shape), true, out);
+  polylineQuads(outlineSamples(grow(rect, h), ρ + h, shape, k), false, out);
+  polylineQuads(outlineSamples(grow(rect, -h), Math.max(0, ρ - h), shape, k), true, out);
   return out;
 }
 
@@ -233,7 +233,7 @@ export function createWebGpuRenderer(): SceneRenderer {
       const ranges: Array<[number, number]> = [];
       for (const b of boxes) {
         const start = all.length;
-        all.push(...strokeRing(b.rect, b.ρ, s.shape, b.width));
+        all.push(...strokeRing(b.rect, b.ρ, s.shape, b.width, s.k));
         ranges.push([start, all.length - start]);
       }
       curveBuf.write(all.slice(0, MAX_CURVES).map((c) => ({

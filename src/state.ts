@@ -21,6 +21,8 @@ export interface AppState {
   ref: RefBox;
   /** How every corner turns its 90° (all corners linked). */
   shape: CornerShape;
+  /** k of superellipse(k) when shape === "superellipse" (exponent 2^k). */
+  k: number;
 }
 
 /** The outer box can never be resized smaller than this, per side. */
@@ -41,6 +43,7 @@ export function initialState(stageW: number, stageH: number): AppState {
     padding: 24,
     ref: "outer",
     shape: "round",
+    k: 2,
   };
 }
 

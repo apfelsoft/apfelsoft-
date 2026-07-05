@@ -88,6 +88,39 @@ document.querySelectorAll<HTMLButtonElement>("#tabs [data-mode]").forEach((b) =>
 });
 
 /* ------------------------------------------------------------------------ *
+ *  Corner-shape tabs (all CSS corner-shape types + catenary) and the
+ *  superellipse k slider, shown only while SUPERELLIPSE is active
+ * ------------------------------------------------------------------------ */
+
+const kRow = document.getElementById("kRow") as HTMLElement;
+const kInput = document.getElementById("kExp") as HTMLInputElement;
+const kOut = document.getElementById("kOut") as HTMLOutputElement;
+
+function syncShapeUI(): void {
+  document.querySelectorAll<HTMLButtonElement>("#shapes [data-shape]").forEach((b) => {
+    b.setAttribute("aria-selected", String(b.dataset.shape === state.shape));
+  });
+  kRow.hidden = state.shape !== "superellipse";
+  kInput.value = String(state.k);
+  kOut.textContent = state.k.toFixed(2);
+}
+
+document.querySelectorAll<HTMLButtonElement>("#shapes [data-shape]").forEach((b) => {
+  b.addEventListener("click", () => {
+    state.shape = b.dataset.shape as CornerShape;
+    syncShapeUI();
+    sync();
+    persistURL();
+  });
+});
+kInput.addEventListener("input", () => {
+  state.k = Number(kInput.value);
+  kOut.textContent = state.k.toFixed(2);
+  sync();
+});
+kInput.addEventListener("change", persistURL);
+
+/* ------------------------------------------------------------------------ *
  *  Shareable URL state: ?r=48&p=24&ref=outer
  * ------------------------------------------------------------------------ */
 
@@ -103,6 +136,8 @@ document.querySelectorAll<HTMLButtonElement>("#tabs [data-mode]").forEach((b) =>
   if (m && (MODES as readonly string[]).includes(m) && renderers[m].supported) mode = m;
   const sh = q.get("shape") as CornerShape | null;
   if (sh && (SHAPES as readonly string[]).includes(sh)) state.shape = sh;
+  const k = Number(q.get("k"));
+  if (Number.isFinite(k) && q.has("k")) state.k = Math.max(-3, Math.min(3, k));
 }
 
 /** Written when a gesture ends, so mid-drag doesn't spam history. */
@@ -113,6 +148,7 @@ function persistURL(): void {
   q.set("ref", state.ref);
   q.set("mode", mode);
   q.set("shape", state.shape);
+  if (state.shape === "superellipse") q.set("k", String(state.k));
   history.replaceState(null, "", `?${q}`);
 }
 
@@ -122,11 +158,17 @@ function persistURL(): void {
 
 function shapeNote(s: AppState): string {
   if (s.shape === "round") return "";
-  const cs = s.shape === "squircle" ? "squircle" : "superellipse(1.171)";
-  const note = s.shape === "catenary" ? "  /* \u2248 catenary */" : "";
+  if (s.shape === "catenary") {
+    // Not a superellipse — the CSS tab draws the whole outline as an
+    // evenodd shape() ring when the engine supports it.
+    return CSS.supports("clip-path", "shape(evenodd from 0px 0px, line to 1px 0px, line to 1px 1px, close)")
+      ? `\n.box { clip-path: shape(evenodd from \u2026, line to \u2026, close,\n                        move to \u2026, line to \u2026, close); }  /* true catenary ring */`
+      : `\n.outer, .inner { corner-shape: superellipse(1.171); }  /* \u2248 catenary; shape() unsupported */`;
+  }
+  const cs = s.shape === "superellipse" ? `superellipse(${s.k})` : s.shape;
   const support = CSS.supports("corner-shape", cs)
     ? "" : "\n/* corner-shape unsupported here \u2192 CSS tab shows round */";
-  return `\n.outer, .inner { corner-shape: ${cs}; }${note}${support}`;
+  return `\n.outer, .inner { corner-shape: ${cs}; }${support}`;
 }
 
 function cssCalculus(s: AppState): string {
@@ -253,30 +295,7 @@ function orthogonalDepth(edge: Edge, pt: Point): number {
   }
 }
 
-const shapeMenu = document.getElementById("shapeMenu") as HTMLElement;
-
-function openShapeMenu(at: Point): void {
-  shapeMenu.hidden = false;
-  shapeMenu.style.left = `${Math.max(8, Math.min(at.x, stageWrap.clientWidth - 110))}px`;
-  shapeMenu.style.top = `${Math.max(8, Math.min(at.y, stageWrap.clientHeight - 110))}px`;
-  shapeMenu.querySelectorAll<HTMLButtonElement>("[data-shape]").forEach((b) => {
-    b.setAttribute("aria-pressed", String(b.dataset.shape === state.shape));
-  });
-}
-
-shapeMenu.querySelectorAll<HTMLButtonElement>("[data-shape]").forEach((b) => {
-  b.addEventListener("click", () => {
-    state.shape = b.dataset.shape as CornerShape;
-    shapeMenu.hidden = true;
-    sync();
-    persistURL();
-  });
-});
-
-let longPress: ReturnType<typeof setTimeout> | undefined;
-
 stage.addEventListener("pointerdown", (e) => {
-  shapeMenu.hidden = true;
   const target = (e.target as Element).closest<SVGElement>("[data-role]");
   if (!target) return;
   const pt = toStage(e);
@@ -296,23 +315,12 @@ stage.addEventListener("pointerdown", (e) => {
   }
   stage.setPointerCapture(e.pointerId);
   e.preventDefault();
-  // Long-press on a corner (its handles) brings up the shape toggle.
-  if ((role === "radius" || role === "resize") && drag.corner) {
-    const at = { ...pt };
-    longPress = setTimeout(() => {
-      if (!drag) return;
-      drag = null;
-      openShapeMenu(at);
-      sync();
-    }, 550);
-  }
   sync();
 });
 
 stage.addEventListener("pointermove", (e) => {
   if (!drag) return;
   const pt = toStage(e);
-  if (Math.hypot(pt.x - drag.start.x, pt.y - drag.start.y) > 8) clearTimeout(longPress);
 
   if (drag.role === "radius" && drag.corner && drag.axis) {
     // Requested ρ is the pointer's distance from the corner along the edge
@@ -349,7 +357,6 @@ stage.addEventListener("pointermove", (e) => {
 });
 
 function endDrag(e: PointerEvent): void {
-  clearTimeout(longPress);
   if (!drag) return;
   drag = null;
   idleMs = 2000; // first edit is done — auto-hide twice as fast from now on
@@ -435,6 +442,7 @@ window.addEventListener("resize", () => {
 });
 
 fitBoxToStage();
+syncShapeUI();
 
 // Subtle gyro parallax where orientation data exists (iOS asks on first tap).
 initParallax(stageWrap);

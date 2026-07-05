@@ -18,9 +18,12 @@ body {
 
 /* ------------------------------- header -------------------------------- */
 header {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px;
-  padding: 12px 16px;
+  padding: 10px 16px 0;
   border-bottom: 1px solid var(--hairline);
+}
+header .hrow {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px;
+  padding-bottom: 10px;
 }
 h1 {
   font: 400 12px var(--mono);
@@ -28,6 +31,33 @@ h1 {
   text-transform: uppercase; letter-spacing: 0.28em;
 }
 #tabs { margin-left: auto; display: flex; }
+#shapes { display: flex; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+#shapes button {
+  font: 9.5px var(--mono); letter-spacing: 0.1em;
+  color: var(--dim); background: #000;
+  border: 1px solid var(--hairline); border-left-width: 0;
+  padding: 5px 8px; cursor: pointer; border-radius: 0;
+  white-space: nowrap; touch-action: manipulation;
+}
+#shapes button:first-child { border-left-width: 1px; }
+#shapes button[aria-selected="true"] { color: #000; background: var(--dim); border-color: var(--dim); }
+#kRow { display: flex; align-items: center; gap: 8px; flex: 1 1 160px; min-width: 150px; }
+#kRow[hidden] { display: none; }
+#kRow label { font: 10.5px var(--mono); color: var(--dim); }
+#kRow output { font: 11px var(--mono); color: var(--ink); min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+#kRow input[type="range"] {
+  flex: 1; appearance: none; -webkit-appearance: none;
+  height: 1px; background: var(--dim); outline: none;
+}
+#kRow input[type="range"]::-webkit-slider-thumb {
+  appearance: none; -webkit-appearance: none;
+  width: 15px; height: 15px; border-radius: 0;
+  background: #000; border: 1px solid var(--ink); cursor: ew-resize;
+}
+#kRow input[type="range"]::-moz-range-thumb {
+  width: 13px; height: 13px; border-radius: 0;
+  background: #000; border: 1px solid var(--ink); cursor: ew-resize;
+}
 #tabs button {
   font: 10px var(--mono); letter-spacing: 0.12em;
   color: var(--dim); background: #000;
@@ -67,27 +97,15 @@ svg#stage {
 /* The CSS renderer's boxes — the derived radius is computed BY CSS. */
 .css-box-outer { border-style: solid; box-sizing: border-box; }
 .css-box-inner { border-style: solid; box-sizing: border-box; width: 100%; height: 100%; }
+/* The outer stroke as a shape() ring (catenary mode) — its own layer so
+   the clip doesn't take the inner box with it. Positioned to the padding
+   box, which equals the full box while borders are 0. */
+.css-box-ring { position: absolute; inset: 0; display: none; }
 /* Drag targets fade out after a few idle seconds (see main.ts) and any
    touch or pointer movement brings them back. */
 #stage-wrap .handles, #refToggle, #stage-wrap .caption {
   transition: opacity 0.5s ease;
 }
-#shapeMenu {
-  position: absolute; z-index: 5;
-  display: flex; flex-direction: column;
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid var(--dim);
-}
-#shapeMenu button {
-  font: 10px var(--mono); letter-spacing: 0.14em; text-align: left;
-  color: var(--dim); background: none; border: 0; border-radius: 0;
-  padding: 8px 12px; cursor: pointer;
-}
-#shapeMenu button + button { border-top: 1px solid var(--hairline); }
-#shapeMenu button[aria-pressed="true"] { color: #000; background: var(--ink); }
-#shapeMenu button:hover { color: var(--ink); }
-#shapeMenu button[aria-pressed="true"]:hover { color: #000; }
-
 #stage-wrap.idle .handles, #stage-wrap.idle #refToggle, #stage-wrap.idle .caption {
   opacity: 0; pointer-events: none;
 }
@@ -100,22 +118,6 @@ svg#stage {
   touch-action: manipulation;
 }
 #refToggle:hover { border-color: var(--ink); }
-#shapeMenu[hidden] { display: none; }
-#shapeMenu {
-  position: absolute; z-index: 5;
-  display: flex; flex-direction: column;
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid var(--dim);
-}
-#shapeMenu button {
-  font: 10px var(--mono); letter-spacing: 0.14em; text-align: left;
-  color: var(--dim); background: none; border: 0; border-radius: 0;
-  padding: 8px 12px; cursor: pointer;
-}
-#shapeMenu button + button { border-top: 1px solid var(--hairline); }
-#shapeMenu button[aria-pressed="true"] { color: #000; background: var(--ink); }
-#shapeMenu button:hover { color: var(--ink); }
-#shapeMenu button[aria-pressed="true"]:hover { color: #000; }
 
 #stage-wrap .caption {
   position: absolute; left: 12px; bottom: 8px; right: 12px;

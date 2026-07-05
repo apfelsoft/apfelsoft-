@@ -35,17 +35,28 @@ export type Radii = Record<Corner, number>;
 export const uniformRadii = (ρ: number): Radii => ({ tl: ρ, tr: ρ, br: ρ, bl: ρ });
 
 /**
- * How a corner turns its 90°:
- *  - round:    a circular quarter arc.
- *  - squircle: a superellipse quarter (|s|⁴ + |c|⁴ = 1) — the iOS look.
+ * How a corner turns its 90° — the CSS corner-shape family plus a catenary:
+ *  - round / squircle / bevel / scoop / notch: the named CSS corner-shape
+ *    keywords, all members of the superellipse(k) family with k = 1, 2, 0,
+ *    −1, −∞ (exponent p = 2^|k|; negative k reflects the convex curve
+ *    across the bevel diagonal).
+ *  - superellipse: the same family with a user-chosen k.
  *  - catenary: a segment of y = cosh(x) between the points where its slope
  *    is ∓1 (a 90° total turn), rotated 45° so the end tangents meet both
- *    edges exactly — the "90° target angle".
- * All three start and end at the same arc start points ρ from the corner,
- * tangent to the edges, so the concentric subtraction rule is untouched.
+ *    edges exactly — the "90° target angle". Not a superellipse.
+ * Every shape starts and ends at the same arc start points ρ from the
+ * corner, so the concentric subtraction rule is untouched.
  */
-export type CornerShape = "round" | "squircle" | "catenary";
-export const SHAPES: readonly CornerShape[] = ["round", "squircle", "catenary"];
+export type CornerShape =
+  | "round" | "squircle" | "bevel" | "scoop" | "notch"
+  | "catenary" | "superellipse";
+export const SHAPES: readonly CornerShape[] =
+  ["round", "squircle", "bevel", "scoop", "notch", "catenary", "superellipse"];
+
+/** The k of the named CSS keywords within the superellipse family. */
+export const NAMED_K: Partial<Record<CornerShape, number>> = {
+  round: 1, squircle: 2, bevel: 0, scoop: -1, notch: -Infinity,
+};
 
 /** Samples per corner for the non-arc shapes. */
 const CORNER_SAMPLES = 24;
@@ -55,16 +66,20 @@ const CORNER_SAMPLES = 24;
  * +u toward the box interior along x, +v along y): runs from (0, 1) on the
  * vertical edge to (1, 0) on the horizontal edge, tangent to both.
  */
-function unitCorner(shape: CornerShape): Array<[number, number]> {
+function superellipseUnit(k: number): Array<[number, number]> {
+  if (k <= -6) return [[0, 1], [1, 1], [1, 0]]; // → notch
+  if (k >= 6) return [[0, 1], [0, 0], [1, 0]];  // → sharp outward corner
+  const e = 2 / Math.pow(2, Math.abs(k));
   const pts: Array<[number, number]> = [];
-  if (shape === "squircle") {
-    const n = 4; // squircle exponent
-    for (let i = 0; i <= CORNER_SAMPLES; i++) {
-      const t = (i / CORNER_SAMPLES) * (Math.PI / 2);
-      pts.push([1 - Math.cos(t) ** (2 / n), 1 - Math.sin(t) ** (2 / n)]);
-    }
-    return pts;
+  for (let i = 0; i <= CORNER_SAMPLES; i++) {
+    const t = (i / CORNER_SAMPLES) * (Math.PI / 2);
+    pts.push([1 - Math.cos(t) ** e, 1 - Math.sin(t) ** e]);
   }
+  // Negative k: the concave twin — reflect across the bevel diagonal.
+  return k < 0 ? pts.map(([u, v]): [number, number] => [1 - v, 1 - u]) : pts;
+}
+
+function unitCorner(shape: CornerShape, k: number): Array<[number, number]> {
   if (shape === "catenary") {
     // y = cosh(x) for x ∈ [−x₁, x₁] with sinh(x₁) = 1 turns exactly 90°.
     const x1 = Math.asinh(1);
@@ -90,29 +105,31 @@ function unitCorner(shape: CornerShape): Array<[number, number]> {
     out[out.length - 1] = [0, 1];
     return out.reverse();
   }
-  // round: quarter circle about (1, 1)
-  for (let i = 0; i <= CORNER_SAMPLES; i++) {
-    const a = Math.PI + (i / CORNER_SAMPLES) * (Math.PI / 2);
-    pts.push([1 + Math.cos(a), 1 + Math.sin(a)]);
-  }
-  return pts;
+  return superellipseUnit(shape === "superellipse" ? k : NAMED_K[shape] ?? 1);
 }
 
-const UNIT_CORNERS: Record<CornerShape, Array<[number, number]>> = {
-  round: unitCorner("round"),
-  squircle: unitCorner("squircle"),
-  catenary: unitCorner("catenary"),
-};
+/** Unit corners are pure functions of (shape, k) — memoize the last few. */
+const unitCache = new Map<string, Array<[number, number]>>();
+function cachedUnitCorner(shape: CornerShape, k: number): Array<[number, number]> {
+  const key = `${shape}:${shape === "superellipse" ? k : ""}`;
+  let u = unitCache.get(key);
+  if (!u) {
+    u = unitCorner(shape, k);
+    if (unitCache.size > 32) unitCache.clear();
+    unitCache.set(key, u);
+  }
+  return u;
+}
 
 /**
  * The full closed outline of a box with uniform corner radius ρ and the
  * given corner shape, as a clockwise polyline in pixel space. Every scene
  * renderer that can't consume an SVG path (WebGPU) walks these points.
  */
-export function outlineSamples(rect: Rect, ρ: number, shape: CornerShape): Array<[number, number]> {
+export function outlineSamples(rect: Rect, ρ: number, shape: CornerShape, k = 2): Array<[number, number]> {
   const { x, y, w, h } = rect;
   const r = Math.max(0, Math.min(ρ, w / 2, h / 2));
-  const unit = UNIT_CORNERS[shape];
+  const unit = cachedUnitCorner(shape, k);
   const pts: Array<[number, number]> = [];
   // tl corner runs (0,1)→(1,0); the other corners reuse it mirrored, in
   // clockwise walking order starting from the top edge.
@@ -128,9 +145,9 @@ export function outlineSamples(rect: Rect, ρ: number, shape: CornerShape): Arra
  * SVG path for a box with uniform ρ and a corner shape: crisp A-arcs for
  * round, sampled polylines for the analytic shapes.
  */
-export function boxPath(rect: Rect, ρ: number, shape: CornerShape): string {
+export function boxPath(rect: Rect, ρ: number, shape: CornerShape, k = 2): string {
   if (shape === "round") return roundedRectPath(rect, uniformRadii(Math.max(0, Math.min(ρ, rect.w / 2, rect.h / 2))));
-  const pts = outlineSamples(rect, ρ, shape);
+  const pts = outlineSamples(rect, ρ, shape, k);
   return `M ${pts.map(([px, py]) => `${px.toFixed(2)},${py.toFixed(2)}`).join(" L ")} Z`;
 }
 

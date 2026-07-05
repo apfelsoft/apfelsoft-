@@ -9,25 +9,38 @@
 <body>
 
 <header>
-  <h1>Concentric Corners</h1>
-  <nav id="tabs" role="tablist" aria-label="Renderer">
-    <button type="button" role="tab" data-mode="css" aria-selected="true">CSS</button>
-    <button type="button" role="tab" data-mode="canvas" aria-selected="false">CANVAS 2D</button>
-    <button type="button" role="tab" data-mode="svg" aria-selected="false">SVG</button>
-    <button type="button" role="tab" data-mode="webgpu" aria-selected="false">WEBGPU·SLUG</button>
-  </nav>
+  <div class="hrow">
+    <h1>Concentric Corners</h1>
+    <nav id="tabs" role="tablist" aria-label="Renderer">
+      <button type="button" role="tab" data-mode="css" aria-selected="true">CSS</button>
+      <button type="button" role="tab" data-mode="canvas" aria-selected="false">CANVAS 2D</button>
+      <button type="button" role="tab" data-mode="svg" aria-selected="false">SVG</button>
+      <button type="button" role="tab" data-mode="webgpu" aria-selected="false">WEBGPU·SLUG</button>
+    </nav>
+  </div>
+  <div class="hrow">
+    <nav id="shapes" role="tablist" aria-label="Corner shape">
+      <button type="button" role="tab" data-shape="round" aria-selected="true">ROUND</button>
+      <button type="button" role="tab" data-shape="squircle" aria-selected="false">SQUIRCLE</button>
+      <button type="button" role="tab" data-shape="bevel" aria-selected="false">BEVEL</button>
+      <button type="button" role="tab" data-shape="scoop" aria-selected="false">SCOOP</button>
+      <button type="button" role="tab" data-shape="notch" aria-selected="false">NOTCH</button>
+      <button type="button" role="tab" data-shape="catenary" aria-selected="false">CATENARY</button>
+      <button type="button" role="tab" data-shape="superellipse" aria-selected="false">SUPERELLIPSE</button>
+    </nav>
+    <div id="kRow" hidden>
+      <label for="kExp">k</label>
+      <input id="kExp" type="range" min="-3" max="3" step="0.05" value="2">
+      <output id="kOut">2.00</output>
+    </div>
+  </div>
 </header>
 
 <div id="stage-wrap">
   <div id="scene-host" aria-hidden="true"></div>
   <svg id="stage"></svg>
   <button id="refToggle" type="button">REF: OUTER ⇄</button>
-  <div id="shapeMenu" hidden>
-    <button type="button" data-shape="round" aria-pressed="true">ROUND</button>
-    <button type="button" data-shape="squircle" aria-pressed="false">SQUIRCLE</button>
-    <button type="button" data-shape="catenary" aria-pressed="false">CATENARY 90°</button>
-  </div>
-  <p class="caption">ROUND HANDLES = RADIUS (LINKED) · EDGES = PADDING · SQUARES = RESIZE (CENTERED) · DBL-CLICK = SHARP · LONG-PRESS CORNER = SHAPE</p>
+  <p class="caption">ROUND HANDLES = RADIUS (LINKED) · EDGES = PADDING · SQUARES = RESIZE (CENTERED) · DBL-CLICK = SHARP</p>
 </div>
 
 <section id="css-out" aria-label="Live CSS for the derived box">

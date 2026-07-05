@@ -329,8 +329,8 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     if (state.shape === "round") return;
     const fromOuter = state.ref === "outer";
     const src = fromOuter
-      ? outlineSamples(state.rect, outerRadius(state), state.shape)
-      : outlineSamples(innerRect(state), innerRadius(state), state.shape);
+      ? outlineSamples(state.rect, outerRadius(state), state.shape, state.k)
+      : outlineSamples(innerRect(state), innerRadius(state), state.shape, state.k);
     const rect = fromOuter ? state.rect : innerRect(state);
     const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
     const p = state.padding;
@@ -390,11 +390,18 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     radiiCompare(state, corner);
   }
 
-  /** The padding dimension while dragging in the padding area. */
+  /** Padding drags show the same corner construction as radius drags. */
   function drawPaddingAux(state: AppState, edge: Edge, at: number): void {
     const { x, y, w, h } = state.rect;
     const p = state.padding;
     const ρOut = outerRadius(state);
+    const ρIn = innerRadius(state);
+    // Anchor the construction at the corner that starts the grabbed edge.
+    const corner: Corner = edge === "top" ? "tl" : edge === "right" ? "tr" : edge === "bottom" ? "br" : "bl";
+    const c = arcCenter(state.rect, corner, ρOut);
+    centerMark(gAux, c, ρOut + 26);
+    if (ρOut >= 1) dottedCircle(gAux, c, ρOut, state.ref === "outer");
+    if (ρIn >= 1) dottedCircle(gAux, c, ρIn, state.ref === "inner");
     // Keep the dimension on the straight part of the edge, clear of arcs.
     const clampAlong = (v: number, lo: number, hi: number) =>
       Math.max(lo, Math.min(v, hi));
@@ -414,8 +421,6 @@ export function createView(stage: SVGSVGElement): (state: AppState, active: Acti
     }
     narrowDimension(gAux, p1, p2);
     drawTrueOffset(state);
-    // Anchor the comparison at the corner that starts the grabbed edge.
-    const corner: Corner = edge === "top" ? "tl" : edge === "right" ? "tr" : edge === "bottom" ? "br" : "bl";
     radiiCompare(state, corner);
   }
 

@@ -30,8 +30,8 @@ export function createSvgRenderer(): SceneRenderer {
 
     draw(s: AppState) {
       if (!outer || !inner) return;
-      outer.setAttribute("d", boxPath(s.rect, outerRadius(s), s.shape));
-      inner.setAttribute("d", boxPath(innerRect(s), innerRadius(s), s.shape));
+      outer.setAttribute("d", boxPath(s.rect, outerRadius(s), s.shape, s.k));
+      inner.setAttribute("d", boxPath(innerRect(s), innerRadius(s), s.shape, s.k));
       outer.setAttribute("stroke", s.ref === "outer" ? BOX_INK : BOX_DIM);
       inner.setAttribute("stroke", s.ref === "inner" ? BOX_INK : BOX_DIM);
     },
