@@ -23,12 +23,9 @@ const SHAPE_OK = typeof CSS !== "undefined" &&
 const grow = (r: Rect, e: number): Rect =>
   ({ x: r.x - e, y: r.y - e, w: r.w + 2 * e, h: r.h + 2 * e });
 
-/** One contour as shape() commands, downsampled to keep the string sane. */
+/** One contour as shape() commands (points are already adaptively sampled). */
 function contour(pts: Array<[number, number]>, head: "from" | "move to"): string {
-  const kept: string[] = [];
-  for (let i = 0; i < pts.length; i += 3) {
-    kept.push(`${pts[i][0].toFixed(1)}px ${pts[i][1].toFixed(1)}px`);
-  }
+  const kept = pts.map(([px, py]) => `${px.toFixed(1)}px ${py.toFixed(1)}px`);
   return `${head} ${kept[0]}, ${kept.slice(1).map((p) => `line to ${p}`).join(", ")}, close`;
 }
 

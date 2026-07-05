@@ -137,7 +137,7 @@ kInput.addEventListener("change", persistURL);
   const sh = q.get("shape") as CornerShape | null;
   if (sh && (SHAPES as readonly string[]).includes(sh)) state.shape = sh;
   const k = Number(q.get("k"));
-  if (Number.isFinite(k) && q.has("k")) state.k = Math.max(-3, Math.min(3, k));
+  if (Number.isFinite(k) && q.has("k")) state.k = Math.max(1, Math.min(3, k));
 }
 
 /** Written when a gesture ends, so mid-drag doesn't spam history. */

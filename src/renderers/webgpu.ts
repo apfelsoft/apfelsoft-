@@ -36,7 +36,7 @@ const DrawUniform = d.struct({
   range: d.vec2u,     // first curve index, curve count
 });
 
-const MAX_CURVES = 2048;
+const MAX_CURVES = 4096;
 
 const layout = tgpu.bindGroupLayout({
   uni: { uniform: DrawUniform, visibility: ["vertex", "fragment"] },
@@ -137,14 +137,14 @@ export type CurveData = { p0: Vec2; p1: Vec2; p2: Vec2 };
 const grow = (r: Rect, e: number): Rect =>
   ({ x: r.x - e, y: r.y - e, w: r.w + 2 * e, h: r.h + 2 * e });
 
-/** A closed polyline (downsampled for the GPU) → line-quads. */
+/**
+ * A closed polyline → degenerate (straight) quadratic segments. The points
+ * already come adaptively sampled to < 5% of a pixel, so every one is kept.
+ */
 function polylineQuads(pts: Vec2[], reverse: boolean, out: CurveData[]): void {
   const p = reverse ? [...pts].reverse() : pts;
-  const step = 3; // every 3rd sample is plenty at stroke scale
-  const kept: Vec2[] = [];
-  for (let i = 0; i < p.length; i += step) kept.push(p[i]);
-  for (let i = 0; i < kept.length; i++) {
-    const a = kept[i], b = kept[(i + 1) % kept.length];
+  for (let i = 0; i < p.length; i++) {
+    const a = p[i], b = p[(i + 1) % p.length];
     out.push({ p0: a, p1: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], p2: b });
   }
 }

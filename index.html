@@ -23,15 +23,12 @@
     <nav id="shapes" role="tablist" aria-label="Corner shape">
       <button type="button" role="tab" data-shape="round" aria-selected="true">ROUND</button>
       <button type="button" role="tab" data-shape="squircle" aria-selected="false">SQUIRCLE</button>
-      <button type="button" role="tab" data-shape="bevel" aria-selected="false">BEVEL</button>
-      <button type="button" role="tab" data-shape="scoop" aria-selected="false">SCOOP</button>
-      <button type="button" role="tab" data-shape="notch" aria-selected="false">NOTCH</button>
-      <button type="button" role="tab" data-shape="catenary" aria-selected="false">CATENARY</button>
       <button type="button" role="tab" data-shape="superellipse" aria-selected="false">SUPERELLIPSE</button>
+      <button type="button" role="tab" data-shape="catenary" aria-selected="false">CATENARY</button>
     </nav>
     <div id="kRow" hidden>
       <label for="kExp">k</label>
-      <input id="kExp" type="range" min="-3" max="3" step="0.05" value="2">
+      <input id="kExp" type="range" min="1" max="3" step="0.05" value="2">
       <output id="kOut">2.00</output>
     </div>
   </div>

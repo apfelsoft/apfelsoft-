@@ -35,102 +35,142 @@ export type Radii = Record<Corner, number>;
 export const uniformRadii = (ρ: number): Radii => ({ tl: ρ, tr: ρ, br: ρ, bl: ρ });
 
 /**
- * How a corner turns its 90° — the CSS corner-shape family plus a catenary:
- *  - round / squircle / bevel / scoop / notch: the named CSS corner-shape
- *    keywords, all members of the superellipse(k) family with k = 1, 2, 0,
- *    −1, −∞ (exponent p = 2^|k|; negative k reflects the convex curve
- *    across the bevel diagonal).
- *  - superellipse: the same family with a user-chosen k.
+ * How a corner turns its 90°:
+ *  - round / squircle: the named CSS corner-shape keywords, members of the
+ *    superellipse(k) family with k = 1 and 2 (exponent p = 2^k).
+ *  - superellipse: the same convex family with a user-chosen k ≥ 1.
  *  - catenary: a segment of y = cosh(x) between the points where its slope
  *    is ∓1 (a 90° total turn), rotated 45° so the end tangents meet both
  *    edges exactly — the "90° target angle". Not a superellipse.
  * Every shape starts and ends at the same arc start points ρ from the
  * corner, so the concentric subtraction rule is untouched.
  */
-export type CornerShape =
-  | "round" | "squircle" | "bevel" | "scoop" | "notch"
-  | "catenary" | "superellipse";
+export type CornerShape = "round" | "squircle" | "superellipse" | "catenary";
 export const SHAPES: readonly CornerShape[] =
-  ["round", "squircle", "bevel", "scoop", "notch", "catenary", "superellipse"];
+  ["round", "squircle", "superellipse", "catenary"];
+
+/** Smallest superellipse exponent offered (k = 1 is the plain circle). */
+export const K_MIN = 1;
+export const K_MAX = 3;
 
 /** The k of the named CSS keywords within the superellipse family. */
 export const NAMED_K: Partial<Record<CornerShape, number>> = {
-  round: 1, squircle: 2, bevel: 0, scoop: -1, notch: -Infinity,
+  round: 1, squircle: 2,
 };
 
-/** Samples per corner for the non-arc shapes. */
-const CORNER_SAMPLES = 24;
+type UV = [number, number];
 
 /**
- * Unit corner curve in top-left-corner local coordinates (corner at (0,0),
- * +u toward the box interior along x, +v along y): runs from (0, 1) on the
- * vertical edge to (1, 0) on the horizontal edge, tangent to both.
+ * A corner as a PARAMETRIC curve P(t), t ∈ [0, 1], in top-left-corner local
+ * coordinates (corner at (0,0), +u toward the box interior along x, +v along
+ * y): P(0) = (0, 1) on the vertical edge, P(1) = (1, 0) on the horizontal
+ * edge, tangent to both. Returns null for the degenerate polyline shapes
+ * (notch / sharp) that have no smooth curve to subdivide.
  */
-function superellipseUnit(k: number): Array<[number, number]> {
-  if (k <= -6) return [[0, 1], [1, 1], [1, 0]]; // → notch
-  if (k >= 6) return [[0, 1], [0, 0], [1, 0]];  // → sharp outward corner
-  const e = 2 / Math.pow(2, Math.abs(k));
-  const pts: Array<[number, number]> = [];
-  for (let i = 0; i <= CORNER_SAMPLES; i++) {
-    const t = (i / CORNER_SAMPLES) * (Math.PI / 2);
-    pts.push([1 - Math.cos(t) ** e, 1 - Math.sin(t) ** e]);
-  }
-  // Negative k: the concave twin — reflect across the bevel diagonal.
-  return k < 0 ? pts.map(([u, v]): [number, number] => [1 - v, 1 - u]) : pts;
-}
-
-function unitCorner(shape: CornerShape, k: number): Array<[number, number]> {
+export function cornerParam(shape: CornerShape, k: number): (t: number) => UV {
   if (shape === "catenary") {
     // y = cosh(x) for x ∈ [−x₁, x₁] with sinh(x₁) = 1 turns exactly 90°.
+    // Rotate +45° so the ∓45° end tangents become 0° and 90°, then fit the
+    // rotated chord (which runs along (1,1)) onto (0,1)→(1,0) with one
+    // uniform scale plus an x-mirror — both preserve edge tangency.
     const x1 = Math.asinh(1);
-    const raw: Array<[number, number]> = [];
-    for (let i = 0; i <= CORNER_SAMPLES; i++) {
-      const x = -x1 + (2 * x1 * i) / CORNER_SAMPLES;
-      raw.push([x, Math.cosh(x)]);
-    }
-    // Rotate +45°: the end tangents (∓45°) become 0° and 90°.
     const c = Math.SQRT1_2;
-    const rot = raw.map(([x, y]): [number, number] => [x * c - y * c, x * c + y * c]);
-    // Map endpoint A (horizontal tangent) onto the horizontal edge point
-    // (1, 0) and endpoint B (vertical tangent) onto (0, 1). The chord of
-    // the rotated curve runs along (1, 1) with Δx = Δy, so one uniform
-    // scale s plus an x-mirror does it — both preserve edge tangency, and
-    // the convex side lands toward the corner like the other shapes.
-    const [ax, ay] = rot[0];
-    const [bx] = rot[rot.length - 1];
+    const rot = (u: number): UV => {
+      const xx = -x1 + 2 * x1 * u, yy = Math.cosh(xx);
+      return [xx * c - yy * c, xx * c + yy * c];
+    };
+    const [ax, ay] = rot(0);
+    const [bx] = rot(1);
     const s = 1 / (bx - ax);
-    const out = rot.map(([x, y]): [number, number] => [1 - (x - ax) * s, (y - ay) * s]);
-    // Pin the ends exactly against float noise, then order (0,1) → (1,0).
-    out[0] = [1, 0];
-    out[out.length - 1] = [0, 1];
-    return out.reverse();
+    return (t) => {
+      if (t <= 0) return [0, 1];
+      if (t >= 1) return [1, 0];
+      const [X, Y] = rot(1 - t); // reverse param so t = 0 → (0, 1)
+      return [1 - (X - ax) * s, (Y - ay) * s];
+    };
   }
-  return superellipseUnit(shape === "superellipse" ? k : NAMED_K[shape] ?? 1);
+  // Convex superellipse quarter, exponent p = 2^k (k ≥ 1): k = 1 is the
+  // plain circle, larger k squares the corner off toward the edges.
+  const kk = shape === "superellipse" ? k : NAMED_K[shape] ?? 1;
+  const e = 2 / Math.pow(2, kk);
+  return (t) => {
+    const a = t * (Math.PI / 2);
+    return [1 - Math.cos(a) ** e, 1 - Math.sin(a) ** e];
+  };
 }
 
-/** Unit corners are pure functions of (shape, k) — memoize the last few. */
-const unitCache = new Map<string, Array<[number, number]>>();
-function cachedUnitCorner(shape: CornerShape, k: number): Array<[number, number]> {
-  const key = `${shape}:${shape === "superellipse" ? k : ""}`;
-  let u = unitCache.get(key);
+/** Perpendicular distance from p to the infinite line through a, b. */
+function lineDist(p: UV, a: UV, b: UV): number {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const L = Math.hypot(dx, dy);
+  if (L < 1e-12) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+  return Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / L;
+}
+
+/**
+ * Chord-deviation budget as a fraction of one pixel. The subdivision test
+ * uses the parameter-midpoint deviation, which slightly under-estimates the
+ * true maximum where curvature concentrates (sharp superellipses), so the
+ * budget is set at 3% to keep the actual worst-case error under the 5% target
+ * with margin.
+ */
+const PIXEL_TOL = 0.03;
+
+/**
+ * Adaptive unit corner for a corner that will be scaled to `r` pixels:
+ * recursively bisect the parameter until the chord's deviation from the true
+ * curve is below PIXEL_TOL pixels everywhere — i.e. sub-5%-of-a-pixel error
+ * against an unlimited-segment reference, with segment count driven by the
+ * local curvature rather than a fixed budget.
+ */
+function adaptiveUnitCorner(shape: CornerShape, k: number, r: number): UV[] {
+  const P = cornerParam(shape, k);
+  const tol = PIXEL_TOL / Math.max(1, r); // pixel tolerance → unit-space
+  const pts: UV[] = [P(0)];
+  const rec = (t0: number, t1: number, p0: UV, p1: UV, depth: number): void => {
+    const tm = 0.5 * (t0 + t1);
+    const pm = P(tm);
+    if (depth <= 0 || lineDist(pm, p0, p1) <= tol) {
+      pts.push(p1);
+      return;
+    }
+    rec(t0, tm, p0, pm, depth - 1);
+    rec(tm, t1, pm, p1, depth - 1);
+  };
+  rec(0, 1, P(0), P(1), 11); // depth 11 → up to 2048 segments if ever needed
+  return pts;
+}
+
+/**
+ * Unit corners depend only on (shape, k, ⌈r⌉) — memoize by those. Radius is
+ * quantized to whole pixels so a steady drag mostly hits the cache while the
+ * tolerance still tracks the on-screen size.
+ */
+const cornerCache = new Map<string, UV[]>();
+function cachedCorner(shape: CornerShape, k: number, r: number): UV[] {
+  const rq = Math.max(1, Math.round(r));
+  const key = `${shape}:${shape === "superellipse" ? k.toFixed(3) : ""}:${rq}`;
+  let u = cornerCache.get(key);
   if (!u) {
-    u = unitCorner(shape, k);
-    if (unitCache.size > 32) unitCache.clear();
-    unitCache.set(key, u);
+    u = adaptiveUnitCorner(shape, k, rq);
+    if (cornerCache.size > 96) cornerCache.clear();
+    cornerCache.set(key, u);
   }
   return u;
 }
 
 /**
  * The full closed outline of a box with uniform corner radius ρ and the
- * given corner shape, as a clockwise polyline in pixel space. Every scene
- * renderer that can't consume an SVG path (WebGPU) walks these points.
+ * given corner shape, as a clockwise polyline in pixel space. Corners are
+ * sampled adaptively so the polyline is within 5% of a pixel of the true
+ * curve at the current radius. Every renderer that can't consume an SVG
+ * path (WebGPU) walks these points.
  */
-export function outlineSamples(rect: Rect, ρ: number, shape: CornerShape, k = 2): Array<[number, number]> {
+export function outlineSamples(rect: Rect, ρ: number, shape: CornerShape, k = 2): UV[] {
   const { x, y, w, h } = rect;
   const r = Math.max(0, Math.min(ρ, w / 2, h / 2));
-  const unit = cachedUnitCorner(shape, k);
-  const pts: Array<[number, number]> = [];
+  const unit = cachedCorner(shape, k, r);
+  const pts: UV[] = [];
   // tl corner runs (0,1)→(1,0); the other corners reuse it mirrored, in
   // clockwise walking order starting from the top edge.
   const rev = [...unit].reverse();
